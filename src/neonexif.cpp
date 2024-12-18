@@ -13,17 +13,6 @@ std::optional<ParseError> read_tiff(Reader &r, ExifData &data);
 
 namespace {
 
-enum class TagId : uint16_t {
-  SubfileType = 0x00feu,
-  OldSubfileType = 0x00ffu,
-  ExifOffset = 0x8769u,
-  SubIFDOffset = 0x014au,
-};
-bool operator==(uint16_t l, TagId r)
-{
-  return l == (uint16_t)r;
-}
-
 bool guess_file_type(Reader &reader)
 {
   const char *data = reader.data;

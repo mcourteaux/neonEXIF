@@ -35,8 +35,7 @@ inline ifd_entry read_ifd_entry(Reader &r)
   DType type = (DType)r.read_u16();
   uint32_t count = r.read_u32();
   uint32_t value = r.read_u32();
-  DEBUG_PRINT("IFD entry {0x%04x %-20s, %x:%-10s, %3d, %08x = %u}",
-      tag, to_str(tag, -1), (int)type, to_str(type), count, value, value);
+  DEBUG_PRINT("IFD entry {0x%04x %-20s, %x:%-10s, %3d, %08x = %u}", tag, to_str(tag, -1), (int)type, to_str(type), count, value, value);
   return {tag, type, count, value};
 }
 
@@ -45,12 +44,14 @@ T fetch_entry_value(const ifd_entry &entry, int idx, Reader &r)
 {
   assert(idx < entry.count);
   int32_t elem_size = size_of_dtype(entry.type);
-  assert(sizeof(T) == elem_size);
+  assert(sizeof(T) >= elem_size);
   T t{0};
   if (entry.size() <= 4) {
-    T inline_data = entry.value;
-    if (r.byte_order == Minolta)
-      inline_data = std::byteswap(entry.value);
+    uint32_t inline_data = entry.value;
+    if (r.byte_order == Minolta) {
+      // Unswap it
+      inline_data = std::byteswap(inline_data);
+    }
     // Data is inline
     std::memcpy(&t, ((char *)&inline_data) + idx * elem_size, elem_size);
   } else {
@@ -87,7 +88,7 @@ inline ParseResult<bool> parse_tag(Reader &r, TagId TagID, Tag<T> &tag, const if
         LOG_WARNING(r, "Warning: unexpected count for:", to_str(entry.tag, ifd_bit));
       }
       if (!matches) {
-        LOG_WARNING(r, "Warning: dtype did not match, but fits.", "");
+        LOG_WARNING(r, "Warning: dtype did not match, but fits.", to_str(entry.tag, ifd_bit));
       }
       if constexpr (std::is_same_v<BType, CharData>) {
         ASSERT_OR_PARSE_ERROR(
@@ -133,6 +134,7 @@ inline ParseResult<bool> parse_tag(Reader &r, TagId TagID, Tag<T> &tag, const if
   {                                                                   \
     using tag_info = TagInfo<(uint16_t)TagId::_name, _ifd_bit>;       \
     static_assert(tag_info::defined);                                 \
+    assert(&(_struct) != nullptr);                                    \
     auto tag_result = parse_tag<tag_info::cpp_type, tag_info::count>( \
       r, TagId::_name, _struct._name, _entry, _ifd_bit                \
     );                                                                \
@@ -154,13 +156,13 @@ std::optional<ParseError> parse_exif_ifd(Reader &r, ExifData &data, uint32_t *ne
     ifd_entry entry = read_ifd_entry(r);
 
     // clang-format off
-    PARSE_TAG(data.exif, exposure_time    , entry, IFD_BitMask::IFD_EXIF);
-    PARSE_TAG(data.exif, f_number         , entry, IFD_BitMask::IFD_EXIF);
-    PARSE_TAG(data.exif, iso              , entry, IFD_BitMask::IFD_EXIF);
-    PARSE_TAG(data.exif, exposure_program , entry, IFD_BitMask::IFD_EXIF);
-    PARSE_TAG(data.exif, focal_length     , entry, IFD_BitMask::IFD_EXIF);
-    PARSE_TAG(data.exif, aperture_value   , entry, IFD_BitMask::IFD_EXIF);
-    PARSE_TAG(data.exif, exif_version     , entry, IFD_BitMask::IFD_EXIF);
+    PARSE_TAG(data.exif, exposure_time    , entry, IFD_BitMasks::IFD_EXIF);
+    PARSE_TAG(data.exif, f_number         , entry, IFD_BitMasks::IFD_EXIF);
+    PARSE_TAG(data.exif, iso              , entry, IFD_BitMasks::IFD_EXIF);
+    PARSE_TAG(data.exif, exposure_program , entry, IFD_BitMasks::IFD_EXIF);
+    PARSE_TAG(data.exif, focal_length     , entry, IFD_BitMasks::IFD_EXIF);
+    PARSE_TAG(data.exif, aperture_value   , entry, IFD_BitMasks::IFD_EXIF);
+    PARSE_TAG(data.exif, exif_version     , entry, IFD_BitMasks::IFD_EXIF);
     // clang-format on
   }
 
@@ -200,12 +202,10 @@ std::optional<ParseError> read_tiff_ifd(Reader &r, ExifData &data, uint32_t ifd_
 
     if (entry.tag == (uint16_t)TagId::subfile_type) {
       // Create new SubIFD!
-      assert(data.num_images < sizeof(data.images) / sizeof(*data.images));
-      current_image = &data.images[data.num_images++];
     }
 
-#define PARSE_IFD0_TAG(_name) PARSE_TAG((*current_image), _name, entry, IFD_BitMask::IFD_ALL_NORMAL)
-#define PARSE_ROOT_TAG(_name) PARSE_TAG(data, _name, entry, IFD_BitMask::IFD_ALL_NORMAL)
+#define PARSE_IFD0_TAG(_name) PARSE_TAG((*current_image), _name, entry, IFD_BitMasks::IFD_ALL_NORMAL)
+#define PARSE_ROOT_TAG(_name) PARSE_TAG(data, _name, entry, IFD_BitMasks::IFD_ALL_NORMAL)
     PARSE_ROOT_TAG(copyright);
     PARSE_ROOT_TAG(artist);
     PARSE_ROOT_TAG(make);
@@ -239,8 +239,8 @@ std::optional<ParseError> read_tiff_ifd(Reader &r, ExifData &data, uint32_t ifd_
       subifd_entries[subifd_counter++] = entry;
     }
 
-    parse_tag<uint32_t, 1>(r, TagId::subfile_type, tag_subfile_type, entry, IFD_BitMask::IFD_ALL_NORMAL);
-    parse_tag<uint16_t, 1>(r, TagId::old_subfile_type, tag_oldsubfile_type, entry, IFD_BitMask::IFD_ALL_NORMAL);
+    parse_tag<uint32_t, 1>(r, TagId::subfile_type, tag_subfile_type, entry, IFD_BitMasks::IFD_ALL_NORMAL);
+    parse_tag<uint16_t, 1>(r, TagId::old_subfile_type, tag_oldsubfile_type, entry, IFD_BitMasks::IFD_ALL_NORMAL);
   }
 
   if (tag_subfile_type.is_set) {
@@ -266,6 +266,8 @@ std::optional<ParseError> read_tiff_ifd(Reader &r, ExifData &data, uint32_t ifd_
       DEBUG_PRINT("Parse subifd #%d / %d", i, entry.count);
       uint32_t next_subifd_offset = fetch_entry_value<uint32_t>(entry, i, r);
       while (next_subifd_offset != 0) {
+        assert(data.num_images < sizeof(data.images) / sizeof(*data.images));
+        current_image = &data.images[data.num_images++];
         if (auto error = read_tiff_ifd(r, data, next_subifd_offset, current_image, &next_subifd_offset)) {
           LOG_WARNING(r, "Cannot parse SubIFD", error->message);
           break;
@@ -286,12 +288,11 @@ std::optional<ParseError> read_tiff(Reader &r, ExifData &data)
 
   int ifd_offset = root_ifd_offset;
   for (int ifd_idx = 0; ifd_idx < 5; ++ifd_idx) {
-    //ImageData *current_image = &data.images[ifd_idx];
-    //data.num_images++;
+    ImageData *current_image = &data.images[data.num_images++];
 
     DEBUG_PRINT("move to IFD at offset: %d\n", ifd_offset);
     uint32_t next_ifd_offset;
-    if (auto error = read_tiff_ifd(r, data, ifd_offset, nullptr, &next_ifd_offset)) {
+    if (auto error = read_tiff_ifd(r, data, ifd_offset, current_image, &next_ifd_offset)) {
       return error;
     }
 

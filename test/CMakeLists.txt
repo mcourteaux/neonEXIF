@@ -28,7 +28,8 @@ download(nikon "d90" "RAW_NIKON_D90.NEF")
 download(nikon "d40" "RAW_NIKON_D40_SRGB.NEF")
 
 #download(canon "d60" "RAW_CANON_D60_ARGB.CRW")
-#download(canon "" "RAW_CANON_EOS_700D.CR2")
+download(canon "" "RAW_CANON_EOS_700D.CR2")
+download(canon "" "RAW_CANON_EOS_5DS.CR2")
 
 foreach(RAW_FILE IN LISTS RAW_FILES)
   get_filename_component(BASENAME "${RAW_FILE}" NAME)

@@ -1,5 +1,6 @@
 #include <cstdio>
 #include <iostream>
+#include <chrono>
 
 #include "neonexif.hpp"
 
@@ -25,15 +26,18 @@ std::ostream &operator<<(std::ostream &o, nexif::Orientation ori)
   return o << to_str(ori);
 }
 
-#define print_tag(data, tag)                                                                       \
-  {                                                                                                \
-    std::printf(" -> \033[%dm%04x\033[0m " #tag, data.tag.is_set ? 32 : 31, data.tag.parsed_from); \
-    if (data.tag.is_set) {                                                                         \
-      std::cout << " = " << data.tag.value;                                                        \
-    } else {                                                                                       \
-      std::cout << " \033[2m(not set)\033[0m";                                                     \
-    }                                                                                              \
-    std::cout << "\n";                                                                             \
+#define print_tag(data, tag)                             \
+  {                                                      \
+    std::printf(                                         \
+      " -> \033[%dm%04x\033[0m \033[33m" #tag "\033[0m", \
+      data.tag.is_set ? 32 : 31, data.tag.parsed_from    \
+    );                                                   \
+    if (data.tag.is_set) {                               \
+      std::cout << " = " << data.tag.value;              \
+    } else {                                             \
+      std::cout << " \033[2m(not set)\033[0m";           \
+    }                                                    \
+    std::cout << "\n";                                   \
   }
 
 void print_image(const nexif::ImageData &id)
@@ -56,9 +60,12 @@ int main(int argc, char **argv)
 {
   if (argc == 2) {
     std::printf("Reading %s\n", argv[1]);
+    auto t0 = std::chrono::high_resolution_clock::now();
+    auto t1 = t0;
     auto result = nexif::read_exif(argv[1]);
     if (result) {
       const nexif::ExifData &exif = result.value();
+      t1 = std::chrono::high_resolution_clock::now();
       std::printf("Parse successful.\n");
       if (result.warnings.empty()) {
         std::printf("No Warnings.\n");
@@ -78,6 +85,7 @@ int main(int argc, char **argv)
       print_tag(exif, model);
       print_tag(exif, software);
 
+      std::printf("EXIF:\n");
       print_tag(exif.exif, exposure_time);
       print_tag(exif.exif, f_number);
       print_tag(exif.exif, iso);
@@ -96,6 +104,8 @@ int main(int argc, char **argv)
       std::printf("Error code: %d\nMessage: %s\n", error.code, error.message);
       return 1;
     }
+    double ms = std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count() * 1e-6;
+    std::printf("Time elapsed: %f ms\n", ms);
   } else {
     printf("Usage: %s <filename>\n", argv[0]);
     return 1;
