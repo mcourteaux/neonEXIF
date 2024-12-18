@@ -4,6 +4,8 @@
 #include "mappedfile.h"
 
 #include <cstring>
+#include <cassert>
+#include <bit>
 
 namespace nexif {
 
@@ -93,6 +95,7 @@ struct Reader {
 
   const char *store_string_data(const char *ptr, int count)
   {
+    assert(exif_data->string_data_ptr + count < sizeof(exif_data->string_data));
     char *dst = &exif_data->string_data[exif_data->string_data_ptr];
     std::memcpy(dst, ptr, count);
     exif_data->string_data[exif_data->string_data_ptr + count] = 0;

@@ -1,9 +1,9 @@
 #pragma once
 
 #include <cstdint>
-#include <expected>
 #include <filesystem>
 #include <list>
+#include <variant>
 
 namespace nexif {
 
@@ -27,12 +27,12 @@ struct ParseResult {
   std::variant<T, ParseError> _v;
   std::list<ParseWarning> warnings;
 
-  ParseResult(T t) :
-    _v(t) {}
-  ParseResult(ParseError::Code code, const char *msg) :
-    _v(ParseError(code, msg)) {}
-  ParseResult(ParseError err) :
-    _v(err) {}
+  // clang-format off
+  ParseResult(T t) : _v(t) {}
+  ParseResult(ParseError::Code code, const char *msg) : _v(ParseError(code, msg)) {}
+  ParseResult(ParseError err) : _v(err) {}
+  // clang-format on
+
   operator bool() const
   {
     return _v.index() == 0;
@@ -68,20 +68,35 @@ inline const char *to_str(FileType ft)
  * refering to string data stored in a buffer closeby. */
 struct CharData {
   CharData() = default;
+  CharData(const CharData &o)
+  {
+    operator=(o.data());
+  }
+  CharData &operator=(const CharData &o)
+  {
+    return operator=(o.data());
+  }
+
   CharData(const char *ptr)
   {
     operator=(ptr);
   }
-  int ptr_offset{0};
+  int16_t ptr_offset{0};
 
   CharData &operator=(const char *ptr)
   {
-    ptr_offset = (ptr - (const char *)this);
+    if (ptr == nullptr) {
+      ptr_offset = 0;
+    } else {
+      ptr_offset = (ptr - (const char *)this);
+    }
     return *this;
   }
 
   const char *data() const
   {
+    if (ptr_offset == 0)
+      return nullptr;
     return (((const char *)this) + ptr_offset);
   }
 };
@@ -106,6 +121,21 @@ enum Orientation : uint16_t {
   MIRROR_HORIZONTAL_ROTATE_90CW = 7,
   ROTATE_270CW = 8
 };
+
+inline const char *to_str(Orientation ori)
+{
+  switch (ori) {
+    case HORIZONTAL: return "Horizontal";
+    case MIRROR_HORIZONTAL: return "Mirror Horizontal";
+    case ROTATE_180: return "Rotate 180";
+    case MIRROR_VERTICAL: return "Mirror Vertical";
+    case MIRROR_HORIZONTAL_ROTATE_270CW: return "Mirror Horizontal Rotate 270CW";
+    case ROTATE_90CW: return "Rotate 90CW";
+    case MIRROR_HORIZONTAL_ROTATE_90CW: return "Mirror Horizontal Rotate 90CW";
+    case ROTATE_270CW: return "Rotate 270CW";
+  }
+  std::abort();
+}
 
 enum SubfileType {
   NONE,
@@ -147,18 +177,22 @@ struct ImageData {
   Tag<uint32_t> image_width;
   Tag<uint32_t> image_height;
   Tag<uint16_t> compression;
+  Tag<uint16_t> photometric_interpretation;
   Tag<Orientation> orientation;
   Tag<uint16_t> samples_per_pixel;
   Tag<rational64u> x_resolution;
   Tag<rational64u> y_resolution;
-  Tag<int16_t> resolution_unit;
+  Tag<uint16_t> resolution_unit;
+
+  Tag<uint32_t> data_offset;
+  Tag<uint32_t> data_length;
 };
 
 struct ExifIFD {
   // Shot
   Tag<rational64u> exposure_time;
   Tag<rational64u> f_number;
-  Tag<uint32_t> iso_speed;
+  Tag<uint16_t> iso;
   Tag<uint16_t> exposure_program;
 
   // Lens
@@ -178,6 +212,7 @@ struct ExifData {
   Tag<CharData> artist;
   Tag<CharData> make;
   Tag<CharData> model;
+  Tag<CharData> software;
 
   ExifIFD exif;
 
