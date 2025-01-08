@@ -66,7 +66,7 @@ std::optional<ParseError> read_exif(Reader &r, ExifData &data)
   std::printf("MMap size: %zu\n", r.file_length);
   r.exif_data = &data;
   if (!guess_file_type(r)) {
-    return PARSE_ERROR(UNKNOWN_FILE_TYPE, "Cannot determine file type.");
+    return PARSE_ERROR(UNKNOWN_FILE_TYPE, "Cannot determine file type.", nullptr);
   }
   data.file_type = r.file_type;
   data.file_type_variant = r.file_type_variant;
@@ -77,7 +77,7 @@ std::optional<ParseError> read_exif(Reader &r, ExifData &data)
       }
     } break;
     default: {
-      return PARSE_ERROR(UNKNOWN_FILE_TYPE, "Parser not implemented");
+      return PARSE_ERROR(UNKNOWN_FILE_TYPE, "Parser not implemented", to_str(data.file_type));
     }
   }
 
@@ -88,9 +88,9 @@ ParseResult<ExifData> read_exif(const std::filesystem::path &path)
 {
   ParseResult<ExifData> result{ExifData{}};
   Reader r{result.warnings};
-  r.data = map_file(path.c_str(), &r.file_length);
-  ASSERT_OR_PARSE_ERROR(r.data != NULL, CANNOT_OPEN_FILE, "Cannot open file.");
-  ASSERT_OR_PARSE_ERROR(r.file_length > 100, CORRUPT_DATA, "File too small.");
+  r.data = map_file(path, &r.file_length);
+  ASSERT_OR_PARSE_ERROR(r.data != NULL, CANNOT_OPEN_FILE, "Cannot open file.", nullptr);
+  ASSERT_OR_PARSE_ERROR(r.file_length > 100, CORRUPT_DATA, "File too small.", nullptr);
   if (auto error = read_exif(r, std::get<0>(result._v))) {
     result._v = error.value();
   }

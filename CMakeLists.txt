@@ -8,9 +8,9 @@ project(NeonEXIF
 
 set(CMAKE_CXX_STANDARD 23)
 
-add_library(neonexif SHARED
+add_library(neonexif STATIC
   "src/neonexif.cpp"
-  "src/mappedfile.c"
+  "src/mappedfile.cpp"
   "src/tiff.cpp"
 )
 target_include_directories(neonexif PUBLIC "include/")

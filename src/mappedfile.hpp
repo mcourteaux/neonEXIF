@@ -20,31 +20,24 @@
  *
  */
 
-#ifndef MAPPEDFILE_H
-#define MAPPEDFILE_H
+#pragma once
 
-#ifdef __cplusplus
-extern "C" {
-#endif /* __cplusplus */
-
-#include <stddef.h>
+#include <cstddef>
+#include <filesystem>
 
 /*!
  * Maps the specified file into memory.
- * \param path the path of the file being mapped
+ * \param path the path of the file being mapped (generic format (utf8))
  * \param length pointer which the mapped length is written to.
  * \return the pointer to the mapping. On failure NULL is returned.
  */
-char *map_file(const char *path, size_t *length);
+char *map_file(const std::filesystem::path &path, size_t *length);
 
 /*! Releases memory allocated by map_file().
  * \param data the pointer returned by map_file().
  * \param length the length returned by map_file().
  */
 void unmap_file(char *data, size_t length);
-
-#ifdef __cplusplus
-}
 
 #include <cstddef>
 #ifdef __EXCEPTIONS
@@ -73,7 +66,7 @@ public:
 	 * \param path path of the file being mapped
 	 * \exception IOException the file couldn't be opened
 	 */
-	mapped_file(const char *path)  : size_(), data_() {
+	mapped_file(const std::filesystem::path &path)  : size_(), data_() {
 		data_ = map_file(path, &size_);
 		if (!data_) {
 #ifdef __EXCEPTIONS
@@ -113,6 +106,4 @@ public:
 	};
 #endif /* __EXCEPTIONS */
 };
-#endif /* __cplusplus */
 
-#endif /* MAPPEDFILE_H */

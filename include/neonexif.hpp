@@ -14,12 +14,13 @@ struct ParseError {
     CORRUPT_DATA,
     INTERNAL_ERROR,
   } code;
-  const char *message;
+  const char *message{nullptr};
+  const char *what{nullptr};
 };
 
 struct ParseWarning {
-  const char *msg;
-  const char *reason;
+  const char *msg{nullptr};
+  const char *what{nullptr};
 };
 
 template <typename T>

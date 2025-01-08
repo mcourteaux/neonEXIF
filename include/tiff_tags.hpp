@@ -20,6 +20,8 @@ struct IFD_BitMasks {
   constexpr static uint16_t IFD_MAKER_NOTES = 0x400;
 
   constexpr static uint16_t IFD_ALL_NORMAL = 0x1f;
+
+  constexpr static uint16_t IFD_ALL = 0xffff;
 };
 
 enum class DType : uint16_t {
@@ -167,7 +169,10 @@ x(0x0201, IFD_BitMasks::IFD_ALL_NORMAL, LONG     , uint32_t   , data_offset     
 x(0x0202, IFD_BitMasks::IFD_ALL_NORMAL, LONG     , uint32_t   , data_length                , scalar         )    \
 x(0x8298, IFD_BitMasks::IFD_ALL_NORMAL, ASCII    , CharData   , copyright                  , variable_count )    \
 x(0x8769, IFD_BitMasks::IFD_ALL_NORMAL, LONG     , uint32_t   , exif_offset                , variable_count )    \
-x(0x014a, IFD_BitMasks::IFD_ALL_NORMAL, LONG     , uint32_t   , sub_ifd_offset             , variable_count )  // clang-format on
+x(0x014a, IFD_BitMasks::IFD_ALL_NORMAL, LONG     , uint32_t   , sub_ifd_offset             , variable_count )    \
+x(0x927c, IFD_BitMasks::IFD_ALL       , UNDEFINED, uint8_t    , makernote                  , variable_count )    \
+x(0x002e, IFD_BitMasks::IFD_ALL       , UNDEFINED, uint8_t    , makernote_alt              , variable_count )
+// clang-format on
 
 // clang-format off
 #define ALL_EXIF_TAGS(x, scalar, fixed_count, variable_count)              \

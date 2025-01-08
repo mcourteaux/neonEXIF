@@ -1,7 +1,7 @@
 #pragma once
 
 #include "neonexif.hpp"
-#include "mappedfile.h"
+#include "mappedfile.hpp"
 
 #include <cstring>
 #include <cassert>
@@ -18,27 +18,26 @@ struct Indenter {
   ~Indenter() { __indent--; }
 };
 
-#define PARSE_ERROR(code, msg)    \
-  ParseError                      \
-  {                               \
-    ParseError::Code::code, (msg) \
+#define PARSE_ERROR(code, msg, what)      \
+  ParseError                              \
+  {                                       \
+    ParseError::Code::code, (msg), (what) \
   }
-#define ASSERT_OR_PARSE_ERROR(cond, code, msg) \
-  if (!(cond)) {                               \
-    return PARSE_ERROR(code, (msg));           \
+#define ASSERT_OR_PARSE_ERROR(cond, code, msg, what) \
+  if (!(cond)) {                                     \
+    return PARSE_ERROR(code, (msg), (what));         \
   }
 
-#define LOG_WARNING(reader, msg, reason)                  \
-  do {                                                    \
-    reader.warnings.push_back(ParseWarning(msg, reason)); \
-    DEBUG_PRINT("Warning: %s (reason: %s)", msg, reason); \
+#define LOG_WARNING(reader, msg, what)                      \
+  do {                                                      \
+    reader.warnings.push_back(ParseWarning((msg), (what))); \
+    DEBUG_PRINT("Warning: %s (what: %s)", (msg), (what));   \
   } while (false)
 
-}
+}  // namespace
 
 enum ByteOrder { Intel,
                  Minolta };
-
 
 struct Reader {
   std::list<ParseWarning> &warnings;
@@ -104,4 +103,4 @@ struct Reader {
   }
 };
 
-}
+}  // namespace nexif

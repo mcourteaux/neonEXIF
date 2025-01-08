@@ -62,7 +62,7 @@ int main(int argc, char **argv)
     std::printf("Reading %s\n", argv[1]);
     auto t0 = std::chrono::high_resolution_clock::now();
     auto t1 = t0;
-    auto result = nexif::read_exif(argv[1]);
+    auto result = nexif::read_exif(std::filesystem::path(argv[1], std::filesystem::path::generic_format));
     if (result) {
       const nexif::ExifData &exif = result.value();
       t1 = std::chrono::high_resolution_clock::now();
@@ -74,8 +74,8 @@ int main(int argc, char **argv)
       }
       for (auto warn : result.warnings) {
         std::printf("  Message: %s\n", warn.msg);
-        if (warn.reason) {
-          std::printf("  ^>  Reason : %s\n", warn.reason);
+        if (warn.what) {
+          std::printf("  ^>  What   : %s\n", warn.what);
         }
       }
       std::printf("File type: %s\n", nexif::to_str(exif.file_type));
@@ -102,6 +102,9 @@ int main(int argc, char **argv)
     } else {
       nexif::ParseError error = result.error();
       std::printf("Error code: %d\nMessage: %s\n", error.code, error.message);
+      if (error.what) {
+        std::printf("What: %s\n", error.what);
+      }
       return 1;
     }
     double ms = std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count() * 1e-6;

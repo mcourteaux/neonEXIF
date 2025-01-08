@@ -31,6 +31,8 @@ download(nikon "d40" "RAW_NIKON_D40_SRGB.NEF")
 download(canon "" "RAW_CANON_EOS_700D.CR2")
 download(canon "" "RAW_CANON_EOS_5DS.CR2")
 
+download(panasonic "" "RAW_PANASONIC_DMC_FZ1000.RW2")
+
 foreach(RAW_FILE IN LISTS RAW_FILES)
   get_filename_component(BASENAME "${RAW_FILE}" NAME)
   message(STATUS "Add test: ${BASENAME}")

@@ -81,26 +81,27 @@ inline ParseResult<bool> parse_tag(Reader &r, TagId TagID, Tag<T> &tag, const if
 {
   using BType = base_type<T>::type;
   if (entry.tag == (uint16_t)TagID) {
+    const char *tag_str = to_str(entry.tag, ifd_bit);
     bool matches = matches_dtype<BType>(entry.type);
     bool fits = fits_dtype<BType>(entry.type);
     if (matches || fits) {
       if (ExpectedCount > 0 && entry.count != ExpectedCount) {
-        LOG_WARNING(r, "Warning: unexpected count for:", to_str(entry.tag, ifd_bit));
+        LOG_WARNING(r, "Warning: unexpected count for:", tag_str);
       }
       if (!matches) {
-        LOG_WARNING(r, "Warning: dtype did not match, but fits.", to_str(entry.tag, ifd_bit));
+        LOG_WARNING(r, "Warning: dtype did not match, but fits.", tag_str);
       }
       if constexpr (std::is_same_v<BType, CharData>) {
         ASSERT_OR_PARSE_ERROR(
           r.exif_data->string_data_ptr + entry.count < sizeof(r.exif_data->string_data),
-          INTERNAL_ERROR, "Internal error: no enough string space."
+          INTERNAL_ERROR, "Internal error: no enough string space.", tag_str
         );
         if (entry.count <= 4) {
-          DEBUG_PRINT("store inline string data of length %d", entry.count);
           tag.value = r.store_string_data((char *)&entry.value, entry.count);
+          DEBUG_PRINT("store inline string data of length %d: %s", entry.count, tag.value.data());
         } else {
-          DEBUG_PRINT("store external string data of length %d", entry.count);
           tag.value = r.store_string_data(r.data + entry.value, entry.count);
+          DEBUG_PRINT("store external string data of length %d: %s", entry.count, tag.value.data());
         }
         tag.parsed_from = (uint16_t)TagID;
         tag.is_set = true;
@@ -121,28 +122,84 @@ inline ParseResult<bool> parse_tag(Reader &r, TagId TagID, Tag<T> &tag, const if
         return true;
       }
       // TODO count > 1 not yet implemented
-      return PARSE_ERROR(UNKNOWN_FILE_TYPE, "tag dtype parser not implemented");
+      return PARSE_ERROR(UNKNOWN_FILE_TYPE, "tag dtype parser not implemented", tag_str);
     } else {
-      std::abort();
-      return PARSE_ERROR(CORRUPT_DATA, "dtype in tag is incorrect");
+      LOG_WARNING(r, "Dtype in tag is incorrect", tag_str);
+      return true;
+      // return PARSE_ERROR(CORRUPT_DATA, "dtype in tag is incorrect", tag_str);
     }
   }
   return false;
 }
 
-#define PARSE_TAG(_struct, _name, _entry, _ifd_bit)                   \
-  {                                                                   \
-    using tag_info = TagInfo<(uint16_t)TagId::_name, _ifd_bit>;       \
-    static_assert(tag_info::defined);                                 \
-    assert(&(_struct) != nullptr);                                    \
-    auto tag_result = parse_tag<tag_info::cpp_type, tag_info::count>( \
-      r, TagId::_name, _struct._name, _entry, _ifd_bit                \
-    );                                                                \
-    if (!tag_result)                                                  \
-      return tag_result.error();                                      \
-    else if (tag_result.value())                                      \
-      continue;                                                       \
+#define PARSE_TAG(_struct, _name, _entry, _ifd_bits, _current_ifd_type) \
+  if (_ifd_bits & _current_ifd_type) {                                  \
+    using tag_info = TagInfo<(uint16_t)TagId::_name, _ifd_bits>;        \
+    static_assert(tag_info::defined);                                   \
+    assert(&(_struct) != nullptr);                                      \
+    auto tag_result = parse_tag<tag_info::cpp_type, tag_info::count>(   \
+      r, TagId::_name, _struct._name, _entry, _ifd_bits                 \
+    );                                                                  \
+    if (!tag_result)                                                    \
+      return tag_result.error();                                        \
+    else if (tag_result.value())                                        \
+      continue;                                                         \
   }
+
+std::optional<ParseError> parse_ifd(Reader &r, ExifData &data, uint32_t *next_offset, uint32_t ifd_type)
+{
+  r.seek(*next_offset);
+
+  auto current_image = &data.images[data.num_images];
+
+  uint16_t num_entries = r.read_u16();
+  DEBUG_PRINT("Num IFD Exif entries: %d", num_entries);
+  assert(num_entries < 1000);
+  Indenter indenter;
+  for (int i = 0; i < num_entries; ++i) {
+    // Read IFD entry.
+    ifd_entry entry = read_ifd_entry(r);
+
+    // clang-format off
+#define PARSE_EXIF_TAG(_name) PARSE_TAG(data.exif, _name, entry, IFD_BitMasks::IFD_EXIF, ifd_type)
+    PARSE_EXIF_TAG(exposure_time);
+    PARSE_EXIF_TAG(f_number);
+    PARSE_EXIF_TAG(iso);
+    PARSE_EXIF_TAG(exposure_program);
+    PARSE_EXIF_TAG(focal_length);
+    PARSE_EXIF_TAG(aperture_value);
+    PARSE_EXIF_TAG(exif_version);
+#undef PARSE_EXIF_TAG
+
+#define PARSE_ROOT_TAG(_name) PARSE_TAG(data, _name, entry, IFD_BitMasks::IFD_ALL_NORMAL, ifd_type)
+    PARSE_ROOT_TAG(copyright);
+    PARSE_ROOT_TAG(artist);
+    PARSE_ROOT_TAG(make);
+    PARSE_ROOT_TAG(model);
+    PARSE_ROOT_TAG(software);
+#undef PARSE_ROOT_TAG
+
+#define PARSE_IFD0_TAG(_name) PARSE_TAG((*current_image), _name, entry, IFD_BitMasks::IFD_ALL_NORMAL, ifd_type)
+    PARSE_IFD0_TAG(image_width);
+    PARSE_IFD0_TAG(image_height);
+    PARSE_IFD0_TAG(compression);
+    PARSE_IFD0_TAG(photometric_interpretation);
+    PARSE_IFD0_TAG(orientation);
+    PARSE_IFD0_TAG(samples_per_pixel);
+    PARSE_IFD0_TAG(x_resolution);
+    PARSE_IFD0_TAG(y_resolution);
+    PARSE_IFD0_TAG(resolution_unit);
+    PARSE_IFD0_TAG(data_offset);
+    PARSE_IFD0_TAG(data_length);
+#undef PARSE_IFD0_TAG
+    // clang-format on
+  }
+  uint32_t next_ifd_offset = r.read_u32();
+  DEBUG_PRINT("Next IFD offset: %d\n", next_ifd_offset);
+  *next_offset = next_ifd_offset;
+
+  return std::nullopt;
+}
 
 std::optional<ParseError> parse_exif_ifd(Reader &r, ExifData &data, uint32_t *next_offset)
 {
@@ -154,16 +211,6 @@ std::optional<ParseError> parse_exif_ifd(Reader &r, ExifData &data, uint32_t *ne
   for (int i = 0; i < num_entries; ++i) {
     // Read IFD entry.
     ifd_entry entry = read_ifd_entry(r);
-
-    // clang-format off
-    PARSE_TAG(data.exif, exposure_time    , entry, IFD_BitMasks::IFD_EXIF);
-    PARSE_TAG(data.exif, f_number         , entry, IFD_BitMasks::IFD_EXIF);
-    PARSE_TAG(data.exif, iso              , entry, IFD_BitMasks::IFD_EXIF);
-    PARSE_TAG(data.exif, exposure_program , entry, IFD_BitMasks::IFD_EXIF);
-    PARSE_TAG(data.exif, focal_length     , entry, IFD_BitMasks::IFD_EXIF);
-    PARSE_TAG(data.exif, aperture_value   , entry, IFD_BitMasks::IFD_EXIF);
-    PARSE_TAG(data.exif, exif_version     , entry, IFD_BitMasks::IFD_EXIF);
-    // clang-format on
   }
 
   uint32_t next_ifd_offset = r.read_u32();
@@ -193,41 +240,21 @@ std::optional<ParseError> read_tiff_ifd(Reader &r, ExifData &data, uint32_t ifd_
     // Read IFD entry.
     ifd_entry entry = read_ifd_entry(r);
     ASSERT_OR_PARSE_ERROR(
-      true
-        && entry.type >= DType::BYTE
-        && entry.type <= DType::SRATIONAL
-        && entry.type != (DType)8,
-      CORRUPT_DATA, "Unknown IFD entry data type"
+      entry.type >= DType::BYTE && entry.type <= DType::DOUBLE,
+      CORRUPT_DATA, "Unknown IFD entry data type", nullptr
     );
 
+    const char *tag_str = to_str(entry.tag, IFD_BitMasks::IFD_ALL_NORMAL);
+
+    if (entry.tag == TagId::makernote || entry.tag == TagId::makernote_alt) {
+    }
     if (entry.tag == (uint16_t)TagId::subfile_type) {
       // Create new SubIFD!
     }
 
-#define PARSE_IFD0_TAG(_name) PARSE_TAG((*current_image), _name, entry, IFD_BitMasks::IFD_ALL_NORMAL)
-#define PARSE_ROOT_TAG(_name) PARSE_TAG(data, _name, entry, IFD_BitMasks::IFD_ALL_NORMAL)
-    PARSE_ROOT_TAG(copyright);
-    PARSE_ROOT_TAG(artist);
-    PARSE_ROOT_TAG(make);
-    PARSE_ROOT_TAG(model);
-    PARSE_ROOT_TAG(software);
-    PARSE_IFD0_TAG(image_width);
-    PARSE_IFD0_TAG(image_height);
-    PARSE_IFD0_TAG(compression);
-    PARSE_IFD0_TAG(photometric_interpretation);
-    PARSE_IFD0_TAG(orientation);
-    PARSE_IFD0_TAG(samples_per_pixel);
-    PARSE_IFD0_TAG(x_resolution);
-    PARSE_IFD0_TAG(y_resolution);
-    PARSE_IFD0_TAG(resolution_unit);
-
-    PARSE_IFD0_TAG(data_offset);
-    PARSE_IFD0_TAG(data_length);
-#undef PARSE_IFD0_TAG
-
     if (entry.tag == uint16_t(TagId::exif_offset)) {
-      ASSERT_OR_PARSE_ERROR(entry.type == DType::LONG, CORRUPT_DATA, "IFD EXIF type wrong");
-      ASSERT_OR_PARSE_ERROR(entry.count == 1, CORRUPT_DATA, "Only one IDF EXIF offset expected");
+      ASSERT_OR_PARSE_ERROR(entry.type == DType::LONG, CORRUPT_DATA, "IFD EXIF type wrong", tag_str);
+      ASSERT_OR_PARSE_ERROR(entry.count == 1, CORRUPT_DATA, "Only one IDF EXIF offset expected", tag_str);
       DEBUG_PRINT("Found IFD exif offset: %d", entry.value);
       r.ifd_offset_exif = entry.value;
       continue;
@@ -296,7 +323,7 @@ std::optional<ParseError> read_tiff(Reader &r, ExifData &data)
       return error;
     }
 
-    ASSERT_OR_PARSE_ERROR(ifd_offset % 2 == 0, CORRUPT_DATA, "IFD must align to word boundary");
+    ASSERT_OR_PARSE_ERROR(ifd_offset % 2 == 0, CORRUPT_DATA, "IFD must align to word boundary", "root IFD");
     if (next_ifd_offset < r.file_length && next_ifd_offset != 0) {
       ifd_offset = next_ifd_offset;
     } else {
