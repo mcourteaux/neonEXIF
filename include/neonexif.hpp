@@ -4,6 +4,9 @@
 #include <filesystem>
 #include <list>
 #include <variant>
+#include <vector>
+#include <cassert>
+#include <cstring>
 
 namespace nexif {
 
@@ -71,26 +74,31 @@ struct CharData {
   CharData() = default;
   CharData(const CharData &o)
   {
-    operator=(o.data());
+    operator=(o);
   }
   CharData &operator=(const CharData &o)
   {
-    return operator=(o.data());
+    set(o.data(), o.length);
+    return *this;
   }
 
-  CharData(const char *ptr)
+  CharData(const char *ptr, uint16_t len)
   {
-    operator=(ptr);
+    set(ptr, len);
   }
-  int16_t ptr_offset{0};
 
-  CharData &operator=(const char *ptr)
+  int16_t ptr_offset{0};
+  uint16_t length{0};
+
+  CharData &set(const char *ptr, uint16_t len)
   {
     if (ptr == nullptr) {
       ptr_offset = 0;
+      assert(len == 0);
     } else {
       ptr_offset = (ptr - (const char *)this);
     }
+    length = len;
     return *this;
   }
 
@@ -214,12 +222,30 @@ struct ExifData {
   Tag<CharData> make;
   Tag<CharData> model;
   Tag<CharData> software;
+  Tag<CharData> processing_software;
+  Tag<CharData> date_time;
+  Tag<CharData> date_time_original;
 
   ExifIFD exif;
 
   char string_data[4096];
   int string_data_ptr{0};
+
+  const char *store_string_data(const char *ptr, int count)
+  {
+    assert(string_data_ptr + count < sizeof(string_data));
+    char *dst = &string_data[string_data_ptr];
+    std::memcpy(dst, ptr, count);
+    string_data[string_data_ptr + count] = 0;
+    string_data_ptr += count + 1;
+    return dst;
+  }
 };
 
 ParseResult<ExifData> read_exif(const std::filesystem::path &path);
+
+size_t write_exif_data(const ExifData &data, std::vector<uint8_t> &output);
+
+std::vector<uint8_t> generate_exif_jpeg_binary_data(const ExifData &data);
+
 }  // namespace nexif

@@ -4,11 +4,13 @@
 
 #include <cstring>
 #include <cassert>
+#include <optional>
 
 namespace nexif {
 
 namespace tiff {
 std::optional<ParseError> read_tiff(Reader &r, ExifData &data);
+size_t write_tiff(Writer &w, const ExifData &data);
 };
 
 namespace {
@@ -94,6 +96,39 @@ ParseResult<ExifData> read_exif(const std::filesystem::path &path)
   if (auto error = read_exif(r, std::get<0>(result._v))) {
     result._v = error.value();
   }
+  return result;
+}
+
+std::vector<uint8_t> generate_exif_jpeg_binary_data(const ExifData &data)
+{
+  std::vector<uint8_t> result;
+  result.reserve(1024 * 8);
+
+  // APP1 marker
+  result.push_back(0xff);
+  result.push_back(0xe1);
+
+  // Length placeholder!
+  result.push_back(0);
+  result.push_back(0);
+
+  result.push_back('E');
+  result.push_back('x');
+  result.push_back('i');
+  result.push_back('f');
+  result.push_back(0);
+  result.push_back(0);
+
+  Writer w(result);
+  w.tiff_base_offset = w.pos;
+  size_t size = tiff::write_tiff(w, data);
+
+
+  // Fill in the size in the placeholder
+  size += 8; // size + Exif00
+  result[2] = (size & 0xff00) >> 8;
+  result[3] = (size & 0x00ff);
+
   return result;
 }
 

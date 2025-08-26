@@ -164,6 +164,7 @@ x(0x011a, IFD_BitMasks::IFD_ALL_NORMAL, RATIONAL , rational64u, x_resolution    
 x(0x011b, IFD_BitMasks::IFD_ALL_NORMAL, RATIONAL , rational64u, y_resolution               , scalar         )    \
 x(0x0128, IFD_BitMasks::IFD_ALL_NORMAL, SHORT    , uint16_t   , resolution_unit            , scalar         )    \
 x(0x0131, IFD_BitMasks::IFD_ALL_NORMAL, ASCII    , CharData   , software                   , variable_count )    \
+x(0x0132, IFD_BitMasks::IFD_ALL_NORMAL, ASCII    , CharData   , date_time                  , variable_count )    \
 x(0x013b, IFD_BitMasks::IFD_ALL_NORMAL, ASCII    , CharData   , artist                     , variable_count )    \
 x(0x0201, IFD_BitMasks::IFD_ALL_NORMAL, LONG     , uint32_t   , data_offset                , scalar         )    \
 x(0x0202, IFD_BitMasks::IFD_ALL_NORMAL, LONG     , uint32_t   , data_length                , scalar         )    \
@@ -171,6 +172,7 @@ x(0x8298, IFD_BitMasks::IFD_ALL_NORMAL, ASCII    , CharData   , copyright       
 x(0x8769, IFD_BitMasks::IFD_ALL_NORMAL, LONG     , uint32_t   , exif_offset                , variable_count )    \
 x(0x014a, IFD_BitMasks::IFD_ALL_NORMAL, LONG     , uint32_t   , sub_ifd_offset             , variable_count )    \
 x(0x927c, IFD_BitMasks::IFD_ALL       , UNDEFINED, uint8_t    , makernote                  , variable_count )    \
+x(0x9003, IFD_BitMasks::IFD_ALL_NORMAL, ASCII    , CharData   , date_time_original         , variable_count )    \
 x(0x002e, IFD_BitMasks::IFD_ALL       , UNDEFINED, uint8_t    , makernote_alt              , variable_count )
 // clang-format on
 
@@ -224,7 +226,8 @@ struct TagInfo {
     using cpp_type = _cpp_type;                                                              \
     constexpr static int count = _count;                                                     \
     constexpr static const char *name = #_name;                                              \
-  };
+  };                                                                                         \
+  using tag_##_name = TagInfo<_tag##u, _ifd_bitmask>;
 
 #define IDENT(x) x
 ALL_IFD0_TAGS(TEMPLATE_TAG_INFO, 1, IDENT, 0);

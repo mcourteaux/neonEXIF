@@ -3,6 +3,7 @@
 
 #include <cassert>
 #include <cstring>
+#include <optional>
 
 namespace nexif {
 namespace tiff {
@@ -18,6 +19,7 @@ struct base_type<T, true> {
 };
 
 struct ifd_entry {
+  constexpr static int BINARY_SIZE = 2 + 2 + 4 + 4;
   uint16_t tag;
   DType type;
   uint32_t count;
@@ -28,6 +30,7 @@ struct ifd_entry {
     return count * size_of_dtype(type);
   }
 };
+static_assert(sizeof(ifd_entry) == ifd_entry::BINARY_SIZE);
 
 inline ifd_entry read_ifd_entry(Reader &r)
 {
@@ -37,6 +40,16 @@ inline ifd_entry read_ifd_entry(Reader &r)
   uint32_t value = r.read_u32();
   DEBUG_PRINT("IFD entry {0x%04x %-20s, %x:%-10s, %3d, %08x = %u}", tag, to_str(tag, -1), (int)type, to_str(type), count, value, value);
   return {tag, type, count, value};
+}
+
+inline size_t write_ifd_entry(Writer &w, const ifd_entry &e)
+{
+  size_t pos = w.current_in_tiff_pos();
+  w.write_u16(e.tag);
+  w.write_u16((uint16_t)e.type);
+  w.write_u32(e.count);
+  w.write_u32(e.value);
+  return pos;
 }
 
 template <typename T>
@@ -97,10 +110,10 @@ inline ParseResult<bool> parse_tag(Reader &r, TagId TagID, Tag<T> &tag, const if
           INTERNAL_ERROR, "Internal error: no enough string space.", tag_str
         );
         if (entry.count <= 4) {
-          tag.value = r.store_string_data((char *)&entry.value, entry.count);
+          tag.value.set(r.store_string_data((char *)&entry.value, entry.count), entry.count);
           DEBUG_PRINT("store inline string data of length %d: %s", entry.count, tag.value.data());
         } else {
-          tag.value = r.store_string_data(r.data + entry.value, entry.count);
+          tag.value.set(r.store_string_data(r.data + entry.value, entry.count), entry.count);
           DEBUG_PRINT("store external string data of length %d: %s", entry.count, tag.value.data());
         }
         tag.parsed_from = (uint16_t)TagID;
@@ -177,6 +190,8 @@ std::optional<ParseError> parse_ifd(Reader &r, ExifData &data, uint32_t *next_of
     PARSE_ROOT_TAG(make);
     PARSE_ROOT_TAG(model);
     PARSE_ROOT_TAG(software);
+    PARSE_ROOT_TAG(processing_software);
+    PARSE_ROOT_TAG(date_time);
 #undef PARSE_ROOT_TAG
 
 #define PARSE_IFD0_TAG(_name) PARSE_TAG((*current_image), _name, entry, IFD_BitMasks::IFD_ALL_NORMAL, ifd_type)
@@ -337,6 +352,239 @@ std::optional<ParseError> read_tiff(Reader &r, ExifData &data)
   }
 
   return std::nullopt;
+}
+
+struct IFD_Writer {
+  uint32_t ifd_offset{0};
+  uint32_t data_offset{0};
+  std::vector<uint8_t> tags;  ///< Tags without IFD num-tags header or next-IFD footer
+  std::vector<uint8_t> data;  ///< Arbitrary data
+  Writer tags_writer{tags};
+  Writer data_writer{data};
+  int num_tags_written{0};
+  int num_offsets_to_adjust{0};
+};
+
+template <typename TagInfo>
+size_t write_tiff_tag_scalar(IFD_Writer &w, typename TagInfo::cpp_type value)
+{
+  static_assert(TagInfo::defined);
+  // Variable count is compatible with count 1
+  static_assert(TagInfo::count == 1 || TagInfo::count == 0);
+  ifd_entry e;
+  e.type = TagInfo::tiff_type;
+  e.tag = TagInfo::TagId;
+  e.count = 1;
+  int required_size = size_of_dtype(e.type) * e.count;
+  if (required_size <= sizeof(uint32_t)) {
+    std::memcpy(&e.value, &value, std::min(sizeof(required_size), sizeof(value)));
+  } else {
+    // The data should be stored elsewhere, in the data section,
+    // after the IFD. We don't know the offset to the data section yet
+    // as that will be determined by how many tags we write in this
+    // IFD. So instead, we leave a placeholder, and we will count
+    // how many offsets need to be rewritten. Detecting which ones
+    // is a matter of doing the "required_size" calculation above.
+    auto offset = w.data_writer.write(value);
+    e.value = (uint32_t)(offset);
+    w.num_offsets_to_adjust++;
+  }
+  w.num_tags_written++;
+  return write_ifd_entry(w.tags_writer, e);
+}
+
+template <typename TagInfo>
+size_t write_tiff_tag_string(IFD_Writer &w, const char *str, uint32_t length)
+{
+  static_assert(TagInfo::defined);
+  static_assert(TagInfo::tiff_type == DType::ASCII);
+  // Variable count is compatible with count 1
+  static_assert(TagInfo::count == 0);
+  ifd_entry e;
+  e.type = TagInfo::tiff_type;
+  e.tag = TagInfo::TagId;
+  e.count = length;
+  if (length <= sizeof(uint32_t)) {
+    e.value = 0;
+    std::memcpy(&e.value, str, length);
+  } else {
+    // The data should be stored elsewhere, in the data section,
+    // after the IFD. We don't know the offset to the data section yet
+    // as that will be determined by how many tags we write in this
+    // IFD. So instead, we leave a placeholder, and we will count
+    // how many offsets need to be rewritten. Detecting which ones
+    // is a matter of doing the "required_size" calculation above.
+    auto offset = w.data_writer.write_string(str, length);
+    e.value = (uint32_t)(offset);
+    w.num_offsets_to_adjust++;
+  }
+  w.num_tags_written++;
+  return write_ifd_entry(w.tags_writer, e);
+}
+
+template <typename TagInfo>
+void write_tiff_tag(IFD_Writer &w, const Tag<typename TagInfo::cpp_type> &tag)
+{
+  if (tag.is_set) {
+    using cppt = typename TagInfo::cpp_type;
+    if constexpr (std::is_same_v<cppt, CharData>) {
+      write_tiff_tag_string<TagInfo>(w, tag.value.data(), tag.value.length);
+    } else {
+      if constexpr (TagInfo::count == 1) {
+        if constexpr (std::is_trivial_v<cppt>) {
+          write_tiff_tag_scalar<TagInfo>(w, tag.value);
+        }
+      }
+    }
+  }
+}
+
+struct OutstandingOffset {
+  size_t ifd_offset;
+  size_t in_ifd_entry_offset;
+  enum { invalid,
+         waiting,
+         written } state{invalid};
+
+  OutstandingOffset() = default;
+  OutstandingOffset(const OutstandingOffset&) = delete;
+  OutstandingOffset(OutstandingOffset&& o) {
+    operator=(std::move(o));
+  }
+  OutstandingOffset &operator=(OutstandingOffset&& o) {
+    ifd_offset = o.ifd_offset;
+    in_ifd_entry_offset = o.in_ifd_entry_offset;
+    state = o.state;
+    o.state = invalid;
+    return *this;
+  }
+
+  ~OutstandingOffset()
+  {
+    assert(state != waiting);
+  }
+
+
+  void set(Writer &w, uint32_t offset)
+  {
+    w.overwrite_u32(w.tiff_base_offset + ifd_offset + in_ifd_entry_offset + 8, offset);
+    state = written;
+  }
+};
+
+template <typename TagInfo>
+OutstandingOffset write_outstanding_tiff_offset_tag(IFD_Writer &w)
+{
+  static_assert(std::is_same_v<typename TagInfo::cpp_type, uint32_t>);
+  size_t in_ifd_offset = write_tiff_tag_scalar<TagInfo>(w, 0xffff);
+  OutstandingOffset oo;
+  oo.ifd_offset = w.ifd_offset;
+  oo.in_ifd_entry_offset = in_ifd_offset + 2;  // 2 for num_tags
+  oo.state = OutstandingOffset::waiting;
+  return oo;
+}
+
+void add_data_offset_to_non_inlined_values(IFD_Writer &w)
+{
+  int num_adjusted = 0;
+  assert(w.num_offsets_to_adjust == 0 || w.data_offset != 0);
+  for (int i = 0; i < w.num_tags_written; ++i) {
+    size_t ifd_entry_offset = sizeof(ifd_entry) * i;
+
+    DType type = (DType)w.tags_writer.read_u16(ifd_entry_offset + 2);
+    uint32_t count = w.tags_writer.read_u32(ifd_entry_offset + 4);
+    int required_bytes = size_of_dtype(type) * count;
+    assert(required_bytes > 0);
+    if (required_bytes > 4) {
+      auto value_offset = ifd_entry_offset + 8;
+      uint32_t offset = w.tags_writer.read_u32(value_offset);
+      DEBUG_PRINT("rewrite offset value: %u to %u", offset, offset + w.data_offset);
+      w.tags_writer.overwrite(value_offset, offset + w.data_offset);
+      num_adjusted++;
+    }
+  }
+  assert(num_adjusted == w.num_offsets_to_adjust);
+}
+
+size_t write_ifd(Writer &w, IFD_Writer &ifd_w)
+{
+  ifd_w.ifd_offset = w.current_in_tiff_pos();
+  ifd_w.data_offset = ifd_w.ifd_offset
+    + sizeof(uint16_t)                            // num tags
+    + ifd_w.num_tags_written * sizeof(ifd_entry)  // tags
+    + sizeof(uint32_t)                            // offset to next ifd
+    ;
+  DEBUG_PRINT(" ifd_offset: %u", ifd_w.ifd_offset);
+  DEBUG_PRINT("data_offset: %u", ifd_w.data_offset);
+  add_data_offset_to_non_inlined_values(ifd_w);
+
+  w.write_u16(ifd_w.num_tags_written);
+  w.write_all(ifd_w.tags);
+  DEBUG_PRINT("tags data size: %zu", ifd_w.tags.size());
+  auto next_ifd_offset_pos = w.write_u32(0);  // next-ifd
+
+  w.write_all(ifd_w.data);
+
+  return next_ifd_offset_pos;
+}
+
+size_t write_tiff(Writer &w, const ExifData &data)
+{
+  size_t tiff_header_pos = w.current_in_tiff_pos();
+  // Intel byte order!
+  w.write_u8('I');
+  w.write_u8('I');
+  w.write_u8(42);
+  w.write_u8(0);
+
+  uint32_t root_ifd_offset = w.current_in_tiff_pos() + sizeof(uint32_t);
+  uint32_t exif_ifd_offset;
+  size_t exif_entry_offset;
+  OutstandingOffset outstanding_exif_offset;
+
+  assert(root_ifd_offset == 8);
+  DEBUG_PRINT("root ifd offset: %u", root_ifd_offset);
+  w.write_u32(root_ifd_offset);
+
+  // Root IFD contains ExifIFD offset
+  {
+    Indenter _;
+    IFD_Writer root_ifd{root_ifd_offset};
+
+    write_tiff_tag<tag_copyright>(root_ifd, data.copyright);
+    write_tiff_tag<tag_artist>(root_ifd, data.artist);
+    write_tiff_tag<tag_make>(root_ifd, data.make);
+    write_tiff_tag<tag_model>(root_ifd, data.model);
+    write_tiff_tag<tag_software>(root_ifd, data.software);
+    write_tiff_tag<tag_processing_software>(root_ifd, data.processing_software);
+    write_tiff_tag<tag_date_time>(root_ifd, data.date_time);
+    write_tiff_tag<tag_date_time_original>(root_ifd, data.date_time_original);
+    outstanding_exif_offset = write_outstanding_tiff_offset_tag<tag_exif_offset>(root_ifd);
+    write_ifd(w, root_ifd);
+  }
+
+  // Exif IFD
+  {
+    exif_ifd_offset = w.current_in_tiff_pos();
+    outstanding_exif_offset.set(w, exif_ifd_offset);
+    DEBUG_PRINT("exif ifd offset: %u", exif_ifd_offset);
+    Indenter _;
+    IFD_Writer exif_ifd{exif_ifd_offset};
+    write_tiff_tag_scalar<tag_subfile_type>(exif_ifd, 1);
+
+    write_tiff_tag<tag_exposure_time>(exif_ifd, data.exif.exposure_time);
+    write_tiff_tag<tag_f_number>(exif_ifd, data.exif.f_number);
+    write_tiff_tag<tag_iso>(exif_ifd, data.exif.iso);
+    write_tiff_tag<tag_exposure_program>(exif_ifd, data.exif.exposure_program);
+
+    write_tiff_tag<tag_focal_length>(exif_ifd, data.exif.focal_length);
+    write_tiff_tag<tag_aperture_value>(exif_ifd, data.exif.aperture_value);
+
+    write_ifd(w, exif_ifd);
+  }
+
+  size_t final_pos = w.current_in_tiff_pos();
+  return final_pos - tiff_header_pos;
 }
 
 }  // namespace tiff

@@ -40,3 +40,12 @@ foreach(RAW_FILE IN LISTS RAW_FILES)
     COMMAND read_file ${RAW_FILE}
     WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}")
 endforeach()
+
+add_executable(generate_exif "generate_exif.cpp")
+target_link_libraries(generate_exif PUBLIC neonexif)
+add_test(NAME generate_exif COMMAND generate_exif)
+
+
+add_executable(add_exif_to_jpeg "add_exif_to_jpeg.cpp")
+target_link_libraries(add_exif_to_jpeg PUBLIC neonexif)
+#add_test(NAME add_exif_to_jpeg COMMAND add_exif_to_jpeg)
