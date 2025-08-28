@@ -1,6 +1,5 @@
-#include "neonexif.hpp"
-
-#include "reader.hpp"
+#include "neonexif/neonexif.hpp"
+#include "neonexif/reader.hpp"
 
 #include <cstring>
 #include <cassert>

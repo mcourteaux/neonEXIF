@@ -240,6 +240,15 @@ struct ExifData {
     string_data_ptr += count + 1;
     return dst;
   }
+
+  CharData store_chardata(const char *ptr, int count = 0) {
+    if (count == 0) {
+      count = std::strlen(ptr);
+    }
+    const char *res = store_string_data(ptr, count);
+    assert(count <= 0xffff);
+    return CharData{res, uint16_t(count)};
+  }
 };
 
 ParseResult<ExifData> read_exif(const std::filesystem::path &path);

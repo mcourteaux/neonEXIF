@@ -2,7 +2,7 @@
 #include <iostream>
 #include <chrono>
 
-#include "neonexif.hpp"
+#include "neonexif/neonexif.hpp"
 
 std::ostream &operator<<(std::ostream &o, const nexif::rational64u &r)
 {

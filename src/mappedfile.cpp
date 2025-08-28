@@ -20,7 +20,7 @@
  *
  */
 
-#include "mappedfile.hpp"
+#include "neonexif/mappedfile.hpp"
 
 #if defined(unix) || defined(__unix__) || defined(__unix) || defined(__MACH__)
 #include <unistd.h>

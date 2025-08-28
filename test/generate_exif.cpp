@@ -1,4 +1,4 @@
-#include "neonexif.hpp"
+#include "neonexif/neonexif.hpp"
 #include "sample_exif_data.hpp"
 
 int main(int argc, char **argv)

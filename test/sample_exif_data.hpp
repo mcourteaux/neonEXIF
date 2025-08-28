@@ -1,5 +1,4 @@
-
-#include "neonexif.hpp"
+#include "neonexif/neonexif.hpp"
 
 static nexif::ExifData generate_sample_exif_data()
 {

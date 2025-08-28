@@ -1,5 +1,5 @@
-#include "tiff_tags.hpp"
-#include "reader.hpp"
+#include "neonexif/tiff_tags.hpp"
+#include "neonexif/reader.hpp"
 
 #include <cassert>
 #include <cstring>
