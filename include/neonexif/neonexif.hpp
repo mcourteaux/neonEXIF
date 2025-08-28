@@ -7,8 +7,28 @@
 #include <vector>
 #include <cassert>
 #include <cstring>
+#include <bit>
 
 namespace nexif {
+
+template <typename T>
+inline T byteswap(T t)
+{
+#ifdef __cpp_lib_byteswap
+  return std::byteswap(t);
+#else
+  static_assert(sizeof(T) <= 8);
+  static_assert((sizeof(T) & (sizeof(T) - 1)) == 0);
+  if constexpr (sizeof(T) == 1)
+    return t;
+  if constexpr (sizeof(T) == 2)
+    return __builtin_bswap16(t);
+  if constexpr (sizeof(T) == 4)
+    return __builtin_bswap32(t);
+  if constexpr (sizeof(T) == 8)
+    return __builtin_bswap64(t);
+#endif
+}
 
 struct ParseError {
   enum Code {
@@ -241,7 +261,8 @@ struct ExifData {
     return dst;
   }
 
-  CharData store_chardata(const char *ptr, int count = 0) {
+  CharData store_chardata(const char *ptr, int count = 0)
+  {
     if (count == 0) {
       count = std::strlen(ptr);
     }

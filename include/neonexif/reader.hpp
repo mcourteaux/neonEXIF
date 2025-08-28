@@ -74,7 +74,7 @@ struct Reader {
     const T t = *(const T *)&data[ptr];
     ptr += sizeof(T);
     if (byte_order == Minolta) {
-      return std::byteswap(t);
+      return nexif::byteswap(t);
     } else {
       return t;
     }

@@ -63,7 +63,7 @@ T fetch_entry_value(const ifd_entry &entry, int idx, Reader &r)
     uint32_t inline_data = entry.value;
     if (r.byte_order == Minolta) {
       // Unswap it
-      inline_data = std::byteswap(inline_data);
+      inline_data = nexif::byteswap(inline_data);
     }
     // Data is inline
     std::memcpy(&t, ((char *)&inline_data) + idx * elem_size, elem_size);
@@ -72,7 +72,7 @@ T fetch_entry_value(const ifd_entry &entry, int idx, Reader &r)
     std::memcpy(&t, r.data + entry.value + elem_size * idx, elem_size);
   }
   if (r.byte_order == Minolta) {
-    t = std::byteswap(t);
+    t = nexif::byteswap(t);
   }
   return t;
 }
