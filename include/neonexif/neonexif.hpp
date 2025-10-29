@@ -140,6 +140,17 @@ struct rational {
 using rational64s = rational<int32_t>;
 using rational64u = rational<uint32_t>;
 
+/** Variable length array */
+template<typename T, uint8_t Max>
+struct vla {
+  T values[Max];
+  uint8_t num{0};
+
+  inline void push_back(const T &v) {
+    values[num++] = v;
+  }
+};
+
 enum Orientation : uint16_t {
   HORIZONTAL = 1,
   MIRROR_HORIZONTAL = 2,
@@ -180,6 +191,57 @@ inline const char *to_str(SubfileType ft)
     case FULL_RESOLUTION: return "Full Resolution";
     case REDUCED_RESOLUTION: return "Reduced Resolution";
     case OTHER: return "OTHER";
+  }
+  std::abort();
+}
+
+enum class Illuminant : uint16_t {
+    Unknown = 0,
+    Daylight = 1,
+    Fluorescent = 2,
+    Tungsten_Incandescent_Light = 3,
+    Flash = 4,
+    Fine_Weather = 9,
+    Cloudy_Weather = 10,
+    Shade = 11,
+    Daylight_Fluorescent = 12,  //  (D 5700 - 7100K)
+    Day_White_Fluorescent = 13, // (N 4600 - 5400K)
+    Cool_White_Fluorescent = 14, // (W 3900 - 4500K)
+    White_Fluorescent = 15, // (WW 3200 - 3700K)
+    Standard_A = 17,  // Standard light A
+    Standard_B = 18,
+    Standard_C = 19,
+    D55 = 20,
+    D65 = 21,
+    D75 = 22,
+    D50 = 23,
+    ISO_Studio_Tungsten = 24,
+};
+
+inline const char *to_str(Illuminant i)
+{
+#define X(v) case Illuminant::v: return #v
+  switch (i) {
+    X(Unknown);
+    X(Daylight);
+    X(Fluorescent);
+    X(Tungsten_Incandescent_Light);
+    X(Flash);
+    X(Fine_Weather);
+    X(Cloudy_Weather);
+    X(Shade);
+    X(Daylight_Fluorescent);
+    X(Day_White_Fluorescent);
+    X(Cool_White_Fluorescent);
+    X(White_Fluorescent);
+    X(Standard_A);
+    X(Standard_B);
+    X(Standard_C);
+    X(D55);
+    X(D65);
+    X(D75);
+    X(D50);
+    X(ISO_Studio_Tungsten);
   }
   std::abort();
 }
@@ -245,6 +307,16 @@ struct ExifData {
   Tag<CharData> processing_software;
   Tag<CharData> date_time;
   Tag<CharData> date_time_original;
+
+  Tag<vla<rational64s, 12>> color_matrix_1;
+  Tag<vla<rational64s, 12>> color_matrix_2;
+  Tag<vla<rational64s, 12>> reduction_matrix_1;
+  Tag<vla<rational64s, 12>> reduction_matrix_2;
+  Tag<vla<rational64s, 12>> calibration_matrix_1;
+  Tag<vla<rational64s, 12>> calibration_matrix_2;
+  Tag<Illuminant> calibration_illuminant_1;
+  Tag<Illuminant> calibration_illuminant_2;
+  Tag<rational64u> analogue_balance;
 
   ExifIFD exif;
 

@@ -12,6 +12,14 @@ std::ostream &operator<<(std::ostream &o, const nexif::rational64u &r)
   }
   return o;
 }
+std::ostream &operator<<(std::ostream &o, const nexif::rational64s &r)
+{
+  o << r.num << "/" << r.denom;
+  if (r.denom != 0) {
+    o << " = " << (double(r.num) / r.denom);
+  }
+  return o;
+}
 
 std::ostream &operator<<(std::ostream &o, const nexif::CharData &d)
 {
@@ -24,6 +32,24 @@ std::ostream &operator<<(std::ostream &o, const nexif::CharData &d)
 std::ostream &operator<<(std::ostream &o, nexif::Orientation ori)
 {
   return o << to_str(ori);
+}
+
+std::ostream &operator<<(std::ostream &o, nexif::Illuminant illum)
+{
+  return o << to_str(illum);
+}
+
+template <typename T, uint8_t C>
+std::ostream &operator<<(std::ostream &o, nexif::vla<T, C> array)
+{
+  for (int i = 0; i < array.num; ++i) {
+    if (i > 0) {
+      o << ",  ";
+    }
+    o << array.values[i];
+  }
+  o << "  (" << (int)array.num << "elems/" << (int)C << "cap)";
+  return o;
 }
 
 #define print_tag(data, tag)                             \
@@ -61,11 +87,10 @@ int main(int argc, char **argv)
   if (argc == 2) {
     std::printf("Reading %s\n", argv[1]);
     auto t0 = std::chrono::high_resolution_clock::now();
-    auto t1 = t0;
     auto result = nexif::read_exif(std::filesystem::path(argv[1], std::filesystem::path::generic_format));
+    auto t1 = std::chrono::high_resolution_clock::now();
     if (result) {
       const nexif::ExifData &exif = result.value();
-      t1 = std::chrono::high_resolution_clock::now();
       std::printf("Parse successful.\n");
       if (result.warnings.empty()) {
         std::printf("No Warnings.\n");
@@ -84,6 +109,13 @@ int main(int argc, char **argv)
       print_tag(exif, make);
       print_tag(exif, model);
       print_tag(exif, software);
+
+      print_tag(exif, color_matrix_1);
+      print_tag(exif, color_matrix_2);
+      print_tag(exif, calibration_matrix_1);
+      print_tag(exif, calibration_matrix_2);
+      print_tag(exif, calibration_illuminant_1);
+      print_tag(exif, calibration_illuminant_2);
 
       std::printf("EXIF:\n");
       print_tag(exif.exif, exposure_time);
