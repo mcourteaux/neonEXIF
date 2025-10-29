@@ -116,6 +116,7 @@ int main(int argc, char **argv)
       print_tag(exif, calibration_matrix_2);
       print_tag(exif, calibration_illuminant_1);
       print_tag(exif, calibration_illuminant_2);
+      print_tag(exif, analog_balance);
 
       std::printf("EXIF:\n");
       print_tag(exif.exif, exposure_time);

@@ -282,6 +282,7 @@ std::optional<ParseError> read_tiff_ifd(Reader &r, ExifData &data, uint32_t ifd_
     PARSE_ROOT_TAG(calibration_matrix_2);
     PARSE_ROOT_TAG(calibration_illuminant_1);
     PARSE_ROOT_TAG(calibration_illuminant_2);
+    PARSE_ROOT_TAG(analog_balance);
 
 #undef PARSE_ROOT_TAG
 

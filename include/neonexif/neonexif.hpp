@@ -316,7 +316,7 @@ struct ExifData {
   Tag<vla<rational64s, 12>> calibration_matrix_2;
   Tag<Illuminant> calibration_illuminant_1;
   Tag<Illuminant> calibration_illuminant_2;
-  Tag<rational64u> analogue_balance;
+  Tag<vla<rational64u, 4>> analog_balance;
 
   ExifIFD exif;
 

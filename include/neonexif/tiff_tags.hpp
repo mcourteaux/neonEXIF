@@ -195,7 +195,7 @@ x(0xc623, IFD_BitMasks::IFD_ALL_NORMAL, SRATIONAL, rational64s, calibration_matr
 x(0xc624, IFD_BitMasks::IFD_ALL_NORMAL, SRATIONAL, rational64s, calibration_matrix_2       , count_limvar<12>     )    \
 x(0xc625, IFD_BitMasks::IFD_ALL_NORMAL, SRATIONAL, rational64s, reduction_matrix_1         , count_limvar<12>     )    \
 x(0xc626, IFD_BitMasks::IFD_ALL_NORMAL, SRATIONAL, rational64s, reduction_matrix_2         , count_limvar<12>     )    \
-x(0xc627, IFD_BitMasks::IFD_ALL_NORMAL, RATIONAL , rational64u, analog_balance             , count_scalar         )    \
+x(0xc627, IFD_BitMasks::IFD_ALL_NORMAL, RATIONAL , rational64u, analog_balance             , count_limvar<4>         )    \
 x(0xc65a, IFD_BitMasks::IFD_ALL_NORMAL, SHORT    , Illuminant , calibration_illuminant_1   , count_scalar         )    \
 x(0xc65b, IFD_BitMasks::IFD_ALL_NORMAL, SHORT    , Illuminant , calibration_illuminant_2   , count_scalar         )
 
