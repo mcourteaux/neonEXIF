@@ -84,7 +84,7 @@ int main(int argc, char **argv)
     }
     std::string ext = file.extension().generic_string();
     std::transform(ext.begin(), ext.end(), ext.begin(), [](uint8_t c) { return std::tolower(c); });
-    if (ext == ".exe" || ext == ".zip" || ext == ".7z" || ext == ".exe") {
+    if (ext == ".exe" || ext == ".zip" || ext == ".7z") {
       continue;
     }
     std::filesystem::path relpath = file.lexically_relative(dir);
@@ -125,6 +125,9 @@ int main(int argc, char **argv)
     print_mark_str(data.model, 20);
     print_mark_str(data.exif.lens_make, 20);
     print_mark_str(data.exif.lens_model, 20);
+
+    double us = std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count() * 1e-3;
+    printf(" %4.0fus", us);
 
     printf("  %s\n", relpath.c_str());
   }
