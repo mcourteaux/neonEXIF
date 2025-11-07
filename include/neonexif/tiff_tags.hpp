@@ -12,14 +12,11 @@ namespace tiff {
 struct IFD_BitMasks {
   constexpr static uint16_t IFD0 = 0x1;
   constexpr static uint16_t IFD1 = 0x2;
-  constexpr static uint16_t IFD2 = 0x4;
-  constexpr static uint16_t IFD3 = 0x8;
-  constexpr static uint16_t IFD4 = 0x10;
   constexpr static uint16_t IFD_EXIF = 0x100;
   constexpr static uint16_t IFD_GPS = 0x200;
-  constexpr static uint16_t IFD_MAKER_NOTES = 0x400;
+  constexpr static uint16_t IFD_MAKERNOTE = 0x400;
 
-  constexpr static uint16_t IFD_ALL_NORMAL = 0x1f;
+  constexpr static uint16_t IFD_01 = 0x1f;
 
   constexpr static uint16_t IFD_ALL = 0xffff;
 };
@@ -102,6 +99,8 @@ inline bool matches_dtype(DType dtype)
     return dtype == DType::FLOAT;
   } else if constexpr (std::is_same_v<T, double>) {
     return dtype == DType::DOUBLE;
+  } else if constexpr (std::is_same_v<T, DateTime>) {
+    return dtype == DType::ASCII;
   }
   return false;
 }
@@ -161,56 +160,76 @@ using count_string = count_spec<0, 1, true, false>;
 
 // clang-format off
 #define ALL_IFD0_TAGS(x)                \
-x(0x0001, IFD_BitMasks::IFD_ALL_NORMAL, ASCII    , CharData   , interop_index              , count_string         )    \
-x(0x0002, IFD_BitMasks::IFD_ALL_NORMAL, UNDEFINED, CharData   , interop_version            , count_scalar         )    \
-x(0x000b, IFD_BitMasks::IFD_ALL_NORMAL, ASCII    , CharData   , processing_software        , count_string         )    \
-x(0x00fe, IFD_BitMasks::IFD_ALL_NORMAL, LONG     , uint32_t   , subfile_type               , count_scalar         )    \
-x(0x00ff, IFD_BitMasks::IFD_ALL_NORMAL, SHORT    , uint16_t   , old_subfile_type           , count_scalar         )    \
-x(0x0100, IFD_BitMasks::IFD_ALL_NORMAL, LONG     , uint32_t   , image_width                , count_scalar         )    \
-x(0x0101, IFD_BitMasks::IFD_ALL_NORMAL, LONG     , uint32_t   , image_height               , count_scalar         )    \
-x(0x0102, IFD_BitMasks::IFD_ALL_NORMAL, LONG     , uint32_t   , bits_per_sample            , count_limvar<8>      )    \
-x(0x0103, IFD_BitMasks::IFD_ALL_NORMAL, SHORT    , uint16_t   , compression                , count_scalar         )    \
-x(0x0106, IFD_BitMasks::IFD_ALL_NORMAL, SHORT    , uint16_t   , photometric_interpretation , count_scalar         )    \
-x(0x010f, IFD_BitMasks::IFD_ALL_NORMAL, ASCII    , CharData   , make                       , count_string         )    \
-x(0x0110, IFD_BitMasks::IFD_ALL_NORMAL, ASCII    , CharData   , model                      , count_string         )    \
-x(0x0112, IFD_BitMasks::IFD_ALL_NORMAL, SHORT    , Orientation, orientation                , count_scalar         )    \
-x(0x0115, IFD_BitMasks::IFD_ALL_NORMAL, SHORT    , uint16_t   , samples_per_pixel          , count_scalar         )    \
-x(0x011a, IFD_BitMasks::IFD_ALL_NORMAL, RATIONAL , rational64u, x_resolution               , count_scalar         )    \
-x(0x011b, IFD_BitMasks::IFD_ALL_NORMAL, RATIONAL , rational64u, y_resolution               , count_scalar         )    \
-x(0x0128, IFD_BitMasks::IFD_ALL_NORMAL, SHORT    , uint16_t   , resolution_unit            , count_scalar         )    \
-x(0x0131, IFD_BitMasks::IFD_ALL_NORMAL, ASCII    , CharData   , software                   , count_string         )    \
-x(0x0132, IFD_BitMasks::IFD_ALL_NORMAL, ASCII    , CharData   , date_time                  , count_string         )    \
-x(0x013b, IFD_BitMasks::IFD_ALL_NORMAL, ASCII    , CharData   , artist                     , count_string         )    \
-x(0x0201, IFD_BitMasks::IFD_ALL_NORMAL, LONG     , uint32_t   , data_offset                , count_scalar         )    \
-x(0x0202, IFD_BitMasks::IFD_ALL_NORMAL, LONG     , uint32_t   , data_length                , count_scalar         )    \
-x(0x8298, IFD_BitMasks::IFD_ALL_NORMAL, ASCII    , CharData   , copyright                  , count_string         )    \
-x(0x8769, IFD_BitMasks::IFD_ALL_NORMAL, LONG     , uint32_t   , exif_offset                , count_scalar         )    \
-x(0x014a, IFD_BitMasks::IFD_ALL_NORMAL, LONG     , uint32_t   , sub_ifd_offset             , count_var            )    \
-x(0x927c, IFD_BitMasks::IFD_ALL       , UNDEFINED, uint8_t    , makernote                  , count_var            )    \
-x(0x9003, IFD_BitMasks::IFD_ALL_NORMAL, ASCII    , CharData   , date_time_original         , count_string         )    \
-x(0x002e, IFD_BitMasks::IFD_ALL       , UNDEFINED, uint8_t    , makernote_alt              , count_var            )    \
-x(0xc621, IFD_BitMasks::IFD_ALL_NORMAL, SRATIONAL, rational64s, color_matrix_1             , count_limvar<12>     )    \
-x(0xc622, IFD_BitMasks::IFD_ALL_NORMAL, SRATIONAL, rational64s, color_matrix_2             , count_limvar<12>     )    \
-x(0xc623, IFD_BitMasks::IFD_ALL_NORMAL, SRATIONAL, rational64s, calibration_matrix_1       , count_limvar<12>     )    \
-x(0xc624, IFD_BitMasks::IFD_ALL_NORMAL, SRATIONAL, rational64s, calibration_matrix_2       , count_limvar<12>     )    \
-x(0xc625, IFD_BitMasks::IFD_ALL_NORMAL, SRATIONAL, rational64s, reduction_matrix_1         , count_limvar<12>     )    \
-x(0xc626, IFD_BitMasks::IFD_ALL_NORMAL, SRATIONAL, rational64s, reduction_matrix_2         , count_limvar<12>     )    \
-x(0xc627, IFD_BitMasks::IFD_ALL_NORMAL, RATIONAL , rational64u, analog_balance             , count_limvar<4>         )    \
-x(0xc65a, IFD_BitMasks::IFD_ALL_NORMAL, SHORT    , Illuminant , calibration_illuminant_1   , count_scalar         )    \
-x(0xc65b, IFD_BitMasks::IFD_ALL_NORMAL, SHORT    , Illuminant , calibration_illuminant_2   , count_scalar         )
+x(0x0001, IFD_BitMasks::IFD_01 , ASCII    , CharData   , interop_index              , count_string         )    \
+x(0x0002, IFD_BitMasks::IFD_01 , UNDEFINED, CharData   , interop_version            , count_scalar         )    \
+x(0x000b, IFD_BitMasks::IFD_01 , ASCII    , CharData   , processing_software        , count_string         )    \
+x(0x00fe, IFD_BitMasks::IFD_01 , LONG     , uint32_t   , subfile_type               , count_scalar         )    \
+x(0x00ff, IFD_BitMasks::IFD_01 , SHORT    , uint16_t   , old_subfile_type           , count_scalar         )    \
+x(0x0100, IFD_BitMasks::IFD_01 , LONG     , uint32_t   , image_width                , count_scalar         )    \
+x(0x0101, IFD_BitMasks::IFD_01 , LONG     , uint32_t   , image_height               , count_scalar         )    \
+x(0x0102, IFD_BitMasks::IFD_01 , LONG     , uint32_t   , bits_per_sample            , count_limvar<8>      )    \
+x(0x0103, IFD_BitMasks::IFD_01 , SHORT    , uint16_t   , compression                , count_scalar         )    \
+x(0x0106, IFD_BitMasks::IFD_01 , SHORT    , uint16_t   , photometric_interpretation , count_scalar         )    \
+x(0x010f, IFD_BitMasks::IFD_01 , ASCII    , CharData   , make                       , count_string         )    \
+x(0x0110, IFD_BitMasks::IFD_01 , ASCII    , CharData   , model                      , count_string         )    \
+x(0x0112, IFD_BitMasks::IFD_01 , SHORT    , Orientation, orientation                , count_scalar         )    \
+x(0x0115, IFD_BitMasks::IFD_01 , SHORT    , uint16_t   , samples_per_pixel          , count_scalar         )    \
+x(0x011a, IFD_BitMasks::IFD_01 , RATIONAL , rational64u, x_resolution               , count_scalar         )    \
+x(0x011b, IFD_BitMasks::IFD_01 , RATIONAL , rational64u, y_resolution               , count_scalar         )    \
+x(0x0128, IFD_BitMasks::IFD_01 , SHORT    , uint16_t   , resolution_unit            , count_scalar         )    \
+x(0x0131, IFD_BitMasks::IFD_01 , ASCII    , CharData   , software                   , count_string         )    \
+x(0x0132, IFD_BitMasks::IFD_01 , ASCII    , DateTime   , date_time                  , count_string         )    \
+x(0x013b, IFD_BitMasks::IFD_01 , ASCII    , CharData   , artist                     , count_string         )    \
+x(0x0201, IFD_BitMasks::IFD_01 , LONG     , uint32_t   , data_offset                , count_scalar         )    \
+x(0x0202, IFD_BitMasks::IFD_01 , LONG     , uint32_t   , data_length                , count_scalar         )    \
+x(0x8298, IFD_BitMasks::IFD_01 , ASCII    , CharData   , copyright                  , count_string         )    \
+x(0x8769, IFD_BitMasks::IFD_01 , LONG     , uint32_t   , exif_offset                , count_scalar         )    \
+x(0x014a, IFD_BitMasks::IFD_01 , LONG     , uint32_t   , sub_ifd_offset             , count_var            )    \
+x(0x927c, IFD_BitMasks::IFD_ALL, UNDEFINED, uint8_t    , makernote                  , count_var            )    \
+x(0x002e, IFD_BitMasks::IFD_ALL, UNDEFINED, uint8_t    , makernote_alt              , count_var            )    \
+x(0xc621, IFD_BitMasks::IFD_01 , SRATIONAL, rational64s, color_matrix_1             , count_limvar<12>     )    \
+x(0xc622, IFD_BitMasks::IFD_01 , SRATIONAL, rational64s, color_matrix_2             , count_limvar<12>     )    \
+x(0xc623, IFD_BitMasks::IFD_01 , SRATIONAL, rational64s, calibration_matrix_1       , count_limvar<12>     )    \
+x(0xc624, IFD_BitMasks::IFD_01 , SRATIONAL, rational64s, calibration_matrix_2       , count_limvar<12>     )    \
+x(0xc625, IFD_BitMasks::IFD_01 , SRATIONAL, rational64s, reduction_matrix_1         , count_limvar<12>     )    \
+x(0xc626, IFD_BitMasks::IFD_01 , SRATIONAL, rational64s, reduction_matrix_2         , count_limvar<12>     )    \
+x(0xc627, IFD_BitMasks::IFD_01 , RATIONAL , rational64u, analog_balance             , count_limvar<4>      )    \
+x(0xc628, IFD_BitMasks::IFD_01 , RATIONAL , rational64u, as_shot_neutral            , count_limvar<4>      )    \
+x(0xc629, IFD_BitMasks::IFD_01 , RATIONAL , rational64u, as_shot_white_xy           , count_fixed<2>       )    \
+x(0xc65a, IFD_BitMasks::IFD_01 , SHORT    , Illuminant , calibration_illuminant_1   , count_scalar         )    \
+x(0xc65b, IFD_BitMasks::IFD_01 , SHORT    , Illuminant , calibration_illuminant_2   , count_scalar         )    \
+x(0x882a, IFD_BitMasks::IFD_01 , SSHORT   , Illuminant , timezone_offset            , count_scalar         )    \
+x(0x9201, IFD_BitMasks::IFD_01 , SRATIONAL, rational64s, apex_aperture_value        , count_scalar         )    \
+x(0x9202, IFD_BitMasks::IFD_01 , SRATIONAL, rational64s, apex_shutter_speed_value   , count_scalar         )    \
 
 // clang-format on
 
 // clang-format off
 #define ALL_EXIF_TAGS(x)              \
-x(0x829a, IFD_BitMasks::IFD_EXIF, RATIONAL , rational64u, exposure_time       , count_scalar         )    \
-x(0x829d, IFD_BitMasks::IFD_EXIF, RATIONAL , rational64u, f_number            , count_scalar         )    \
-x(0x8827, IFD_BitMasks::IFD_EXIF, SHORT    , uint16_t   , iso                 , count_scalar         )    \
-x(0x8822, IFD_BitMasks::IFD_EXIF, SHORT    , uint16_t   , exposure_program    , count_scalar         )    \
-x(0x920a, IFD_BitMasks::IFD_EXIF, RATIONAL , rational64u, focal_length        , count_scalar         )    \
-x(0x9202, IFD_BitMasks::IFD_EXIF, RATIONAL , rational64u, aperture_value      , count_scalar         )    \
-x(0x9000, IFD_BitMasks::IFD_EXIF, UNDEFINED, CharData   , exif_version        , count_string         )  // clang-format on
-
+x(0x829a, IFD_BitMasks::IFD_EXIF, RATIONAL , rational64u, exposure_time             , count_scalar         )    \
+x(0x829d, IFD_BitMasks::IFD_EXIF, RATIONAL , rational64u, f_number                  , count_scalar         )    \
+x(0x8827, IFD_BitMasks::IFD_EXIF, SHORT    , uint16_t   , iso                       , count_scalar         )    \
+x(0x8822, IFD_BitMasks::IFD_EXIF, SHORT    , uint16_t   , exposure_program          , count_scalar         )    \
+x(0x920a, IFD_BitMasks::IFD_ALL , RATIONAL , rational64u, focal_length              , count_scalar         )    \
+x(0x9000, IFD_BitMasks::IFD_EXIF, UNDEFINED, CharData   , exif_version              , count_string         )    \
+x(0x9003, IFD_BitMasks::IFD_EXIF, ASCII    , DateTime   , date_time_original        , count_string         )    \
+x(0x9004, IFD_BitMasks::IFD_EXIF, ASCII    , DateTime   , date_time_digitized       , count_string         )    \
+x(0x9290, IFD_BitMasks::IFD_EXIF, ASCII    , uint16_t   , subsectime                , count_string         )    \
+x(0x9291, IFD_BitMasks::IFD_EXIF, ASCII    , uint16_t   , subsectime_original       , count_string         )    \
+x(0x9292, IFD_BitMasks::IFD_EXIF, ASCII    , uint16_t   , subsectime_digitized      , count_string         )    \
+x(0xa430, IFD_BitMasks::IFD_EXIF, ASCII    , CharData   , camera_owner_name         , count_string         )    \
+x(0xa431, IFD_BitMasks::IFD_EXIF, ASCII    , CharData   , body_serial_number        , count_string         )    \
+x(0xa433, IFD_BitMasks::IFD_EXIF, ASCII    , CharData   , lens_make                 , count_string         )    \
+x(0xa434, IFD_BitMasks::IFD_EXIF, ASCII    , CharData   , lens_model                , count_string         )    \
+x(0xa435, IFD_BitMasks::IFD_EXIF, ASCII    , CharData   , lens_serial_number        , count_string         )    \
+x(0xa436, IFD_BitMasks::IFD_EXIF, ASCII    , CharData   , image_title               , count_string         )    \
+x(0xa437, IFD_BitMasks::IFD_EXIF, ASCII    , CharData   , photographer              , count_string         )    \
+x(0xa438, IFD_BitMasks::IFD_EXIF, ASCII    , CharData   , image_editor              , count_string         )    \
+x(0xa43a, IFD_BitMasks::IFD_EXIF, ASCII    , CharData   , raw_developing_software   , count_string         )    \
+x(0xa43b, IFD_BitMasks::IFD_EXIF, ASCII    , CharData   , image_editing_software    , count_string         )    \
+x(0xa43c, IFD_BitMasks::IFD_EXIF, ASCII    , CharData   , metadata_editing_software , count_string         )    \
+  //
+// clang-format on
 #define TAG_ENUM(tag, ifd_bitmask, expected_tiff_type, cpp_type, name, count) name = tag##u,
 
 enum class TagId : uint16_t {

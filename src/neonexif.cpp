@@ -7,10 +7,13 @@
 
 namespace nexif {
 
+bool debug_print_enabled = false;
+
+
 namespace tiff {
 std::optional<ParseError> read_tiff(Reader &r, ExifData &data);
 size_t write_tiff(Writer &w, const ExifData &data);
-};
+};  // namespace tiff
 
 namespace {
 
@@ -64,7 +67,7 @@ bool guess_file_type(Reader &reader)
 
 std::optional<ParseError> read_exif(Reader &r, ExifData &data)
 {
-  std::printf("MMap size: %zu\n", r.file_length);
+  DEBUG_PRINT("MMap size: %zu\n", r.file_length);
   r.exif_data = &data;
   if (!guess_file_type(r)) {
     return PARSE_ERROR(UNKNOWN_FILE_TYPE, "Cannot determine file type.", nullptr);
@@ -87,11 +90,25 @@ std::optional<ParseError> read_exif(Reader &r, ExifData &data)
 
 ParseResult<ExifData> read_exif(const std::filesystem::path &path)
 {
+  size_t file_length;
+  char *data = map_file(path, &file_length);
+  ASSERT_OR_PARSE_ERROR(data != NULL, CANNOT_OPEN_FILE, "Cannot open file.", nullptr);
+  ASSERT_OR_PARSE_ERROR(file_length > 100, CORRUPT_DATA, "File too small.", nullptr);
+
+  ParseResult<ExifData> result = read_exif(data, file_length);
+  unmap_file(data, file_length);
+  return result;
+}
+
+ParseResult<ExifData> read_exif(const char *buffer, size_t length)
+{
+  ASSERT_OR_PARSE_ERROR(buffer != NULL, CANNOT_OPEN_FILE, "No buffer provided.", nullptr);
+  ASSERT_OR_PARSE_ERROR(length > 100, CORRUPT_DATA, "Buffer too small.", nullptr);
+
   ParseResult<ExifData> result{ExifData{}};
   Reader r{result.warnings};
-  r.data = map_file(path, &r.file_length);
-  ASSERT_OR_PARSE_ERROR(r.data != NULL, CANNOT_OPEN_FILE, "Cannot open file.", nullptr);
-  ASSERT_OR_PARSE_ERROR(r.file_length > 100, CORRUPT_DATA, "File too small.", nullptr);
+  r.data = buffer;
+  r.file_length = length;
   if (auto error = read_exif(r, std::get<0>(result._v))) {
     result._v = error.value();
   }
@@ -122,9 +139,8 @@ std::vector<uint8_t> generate_exif_jpeg_binary_data(const ExifData &data)
   w.tiff_base_offset = w.pos;
   size_t size = tiff::write_tiff(w, data);
 
-
   // Fill in the size in the placeholder
-  size += 8; // size + Exif00
+  size += 8;  // size + Exif00
   result[2] = (size & 0xff00) >> 8;
   result[3] = (size & 0x00ff);
 

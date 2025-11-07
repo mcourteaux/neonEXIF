@@ -11,13 +11,6 @@ namespace nexif {
 
 namespace {
 
-int __indent = 0;
-#define DEBUG_PRINT(fmt, args...) std::printf("%*s\033[2m" fmt "\033[0m\n", __indent * 4, "", ##args)
-struct Indenter {
-  Indenter() { __indent++; }
-  ~Indenter() { __indent--; }
-};
-
 #define PARSE_ERROR(code, msg, what)      \
   ParseError                              \
   {                                       \
@@ -44,7 +37,7 @@ struct Reader {
   Reader(std::list<ParseWarning> &warnings) :
     warnings(warnings) {}
 
-  char *data{nullptr};
+  const char *data{nullptr};
   size_t file_length{0};
   ByteOrder byte_order;
 
@@ -53,9 +46,6 @@ struct Reader {
 
   ~Reader()
   {
-    if (data) {
-      unmap_file(data, file_length);
-    }
   }
 
   Reader(Reader &&) = delete;
@@ -92,7 +82,19 @@ struct Reader {
   // clang-format on
 
   ExifData *exif_data;
-  uint32_t ifd_offset_exif{0};
+
+  struct SubIFDRef {
+    uint32_t offset;
+    enum Type {
+      EXIF,
+      GPS,
+      INTEROP,
+      MAKERNOTE,
+      OTHER
+    } type;
+    bool parsed{false};
+  };
+  vla<SubIFDRef, 16> subifd_refs;
 
   const char *store_string_data(const char *ptr, int count)
   {
@@ -105,15 +107,20 @@ struct Writer {
   size_t pos;
   int32_t tiff_base_offset{0};
 
-  Writer(std::vector<uint8_t> &dst) : dst(dst), pos(dst.size()) {
+  Writer(std::vector<uint8_t> &dst) :
+    dst(dst),
+    pos(dst.size())
+  {
   }
 
-  int32_t current_in_tiff_pos() const {
+  int32_t current_in_tiff_pos() const
+  {
     return pos - tiff_base_offset;
   }
 
-  template<typename T>
-  inline size_t write(T t) {
+  template <typename T>
+  inline size_t write(T t)
+  {
     size_t old_pos = pos;
     dst.insert(dst.begin() + old_pos, sizeof(T), 0);
     std::memcpy(&dst[old_pos], &t, sizeof(T));
@@ -121,28 +128,32 @@ struct Writer {
     return old_pos;
   }
 
-  template<typename T>
-  inline void overwrite(size_t pos, T t) {
+  template <typename T>
+  inline void overwrite(size_t pos, T t)
+  {
     assert(pos + sizeof(T) <= dst.size());
     std::memcpy(&dst[pos], &t, sizeof(T));
   }
 
-  template<typename T>
-  inline T read(size_t pos) {
+  template <typename T>
+  inline T read(size_t pos)
+  {
     assert(pos + sizeof(T) <= dst.size());
     T t;
     std::memcpy(&t, &dst[pos], sizeof(T));
     return t;
   }
 
-  inline size_t write_string(const char *str, uint32_t len) {
+  inline size_t write_string(const char *str, uint32_t len)
+  {
     size_t old_pos = pos;
     dst.insert(dst.begin() + old_pos, str, str + len);
     pos += len;
     return old_pos;
   }
 
-  inline size_t write_all(const std::vector<uint8_t> &buf) {
+  inline size_t write_all(const std::vector<uint8_t> &buf)
+  {
     size_t old_pos = pos;
     dst.insert(dst.begin() + pos, buf.begin(), buf.end());
     pos += buf.size();

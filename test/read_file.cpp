@@ -29,6 +29,18 @@ std::ostream &operator<<(std::ostream &o, const nexif::CharData &d)
   return o << "(None)";
 }
 
+std::ostream &operator<<(std::ostream &o, const nexif::DateTime &d)
+{
+  char buffer[64];
+  std::snprintf(
+    buffer, sizeof(buffer),
+    "%d-%02d-%02d %d:%02d:%02d,%03d",
+    d.year, d.month, d.day, d.hour, d.minute, d.second, d.millis
+  );
+  o << buffer;
+  return o;
+}
+
 std::ostream &operator<<(std::ostream &o, nexif::Orientation ori)
 {
   return o << to_str(ori);
@@ -40,7 +52,7 @@ std::ostream &operator<<(std::ostream &o, nexif::Illuminant illum)
 }
 
 template <typename T, uint8_t C>
-std::ostream &operator<<(std::ostream &o, nexif::vla<T, C> array)
+std::ostream &operator<<(std::ostream &o, const nexif::vla<T, C> &array)
 {
   for (int i = 0; i < array.num; ++i) {
     if (i > 0) {
@@ -49,6 +61,18 @@ std::ostream &operator<<(std::ostream &o, nexif::vla<T, C> array)
     o << array.values[i];
   }
   o << "  (" << (int)array.num << "elems/" << (int)C << "cap)";
+  return o;
+}
+
+template <typename T, size_t C>
+std::ostream &operator<<(std::ostream &o, const std::array<T, C> &array)
+{
+  for (size_t i = 0; i < C; ++i) {
+    if (i > 0) {
+      o << ",  ";
+    }
+    o << array[i];
+  }
   return o;
 }
 
@@ -104,6 +128,7 @@ int main(int argc, char **argv)
         }
       }
       std::printf("File type: %s\n", nexif::to_str(exif.file_type));
+      print_tag(exif, date_time);
       print_tag(exif, copyright);
       print_tag(exif, artist);
       print_tag(exif, make);
@@ -116,7 +141,11 @@ int main(int argc, char **argv)
       print_tag(exif, calibration_matrix_2);
       print_tag(exif, calibration_illuminant_1);
       print_tag(exif, calibration_illuminant_2);
+      print_tag(exif, as_shot_neutral);
+      print_tag(exif, as_shot_white_xy);
       print_tag(exif, analog_balance);
+      print_tag(exif, apex_aperture_value);
+      print_tag(exif, apex_shutter_speed_value);
 
       std::printf("EXIF:\n");
       print_tag(exif.exif, exposure_time);
@@ -124,9 +153,21 @@ int main(int argc, char **argv)
       print_tag(exif.exif, iso);
       print_tag(exif.exif, exposure_program);
       print_tag(exif.exif, focal_length);
-      print_tag(exif.exif, aperture_value);
+      print_tag(exif.exif, date_time_original);
+      print_tag(exif.exif, date_time_digitized);
 
       print_tag(exif.exif, exif_version);
+      print_tag(exif.exif, camera_owner_name         );
+      print_tag(exif.exif, body_serial_number        );
+      print_tag(exif.exif, lens_make                 );
+      print_tag(exif.exif, lens_model                );
+      print_tag(exif.exif, lens_serial_number        );
+      print_tag(exif.exif, image_title               );
+      print_tag(exif.exif, photographer              );
+      print_tag(exif.exif, image_editor              );
+      print_tag(exif.exif, raw_developing_software   );
+      print_tag(exif.exif, image_editing_software    );
+      print_tag(exif.exif, metadata_editing_software );
 
       for (int image_idx = 0; image_idx < exif.num_images; ++image_idx) {
         std::printf("Image #%d:\n", image_idx);

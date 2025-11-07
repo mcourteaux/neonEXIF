@@ -41,10 +41,13 @@ foreach(RAW_FILE IN LISTS RAW_FILES)
     WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}")
 endforeach()
 
+add_executable(matrix "matrix.cpp")
+target_link_libraries(matrix PUBLIC neonexif)
+add_test(NAME matrix COMMAND matrix ${PHOTOS_DIR})
+
 add_executable(generate_exif "generate_exif.cpp")
 target_link_libraries(generate_exif PUBLIC neonexif)
 add_test(NAME generate_exif COMMAND generate_exif)
-
 
 add_executable(add_exif_to_jpeg "add_exif_to_jpeg.cpp")
 target_link_libraries(add_exif_to_jpeg PUBLIC neonexif)

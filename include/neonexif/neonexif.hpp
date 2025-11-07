@@ -11,6 +11,17 @@
 
 namespace nexif {
 
+inline int __indent = 0;
+inline bool enable_debug_print = false;
+struct Indenter {
+  Indenter() { __indent++; }
+  ~Indenter() { __indent--; }
+};
+#define DEBUG_PRINT(fmt, args...)                                        \
+  if (enable_debug_print) {                                              \
+    std::printf("%*s\033[2m" fmt "\033[0m\n", __indent * 4, "", ##args); \
+  }
+
 template <typename T>
 inline T byteswap(T t)
 {
@@ -40,6 +51,17 @@ struct ParseError {
   const char *message{nullptr};
   const char *what{nullptr};
 };
+
+inline const char *to_str(ParseError::Code c)
+{
+  switch (c) {
+    case ParseError::CANNOT_OPEN_FILE: return "Cannot open file";
+    case ParseError::UNKNOWN_FILE_TYPE: return "Unknown file type";
+    case ParseError::CORRUPT_DATA: return "Corrupt data";
+    case ParseError::INTERNAL_ERROR: return "Internal error";
+  }
+  std::abort();
+}
 
 struct ParseWarning {
   const char *msg{nullptr};
@@ -141,12 +163,13 @@ using rational64s = rational<int32_t>;
 using rational64u = rational<uint32_t>;
 
 /** Variable length array */
-template<typename T, uint8_t Max>
+template <typename T, uint8_t Max>
 struct vla {
   T values[Max];
   uint8_t num{0};
 
-  inline void push_back(const T &v) {
+  inline void push_back(const T &v)
+  {
     values[num++] = v;
   }
 };
@@ -196,31 +219,32 @@ inline const char *to_str(SubfileType ft)
 }
 
 enum class Illuminant : uint16_t {
-    Unknown = 0,
-    Daylight = 1,
-    Fluorescent = 2,
-    Tungsten_Incandescent_Light = 3,
-    Flash = 4,
-    Fine_Weather = 9,
-    Cloudy_Weather = 10,
-    Shade = 11,
-    Daylight_Fluorescent = 12,  //  (D 5700 - 7100K)
-    Day_White_Fluorescent = 13, // (N 4600 - 5400K)
-    Cool_White_Fluorescent = 14, // (W 3900 - 4500K)
-    White_Fluorescent = 15, // (WW 3200 - 3700K)
-    Standard_A = 17,  // Standard light A
-    Standard_B = 18,
-    Standard_C = 19,
-    D55 = 20,
-    D65 = 21,
-    D75 = 22,
-    D50 = 23,
-    ISO_Studio_Tungsten = 24,
+  Unknown = 0,
+  Daylight = 1,
+  Fluorescent = 2,
+  Tungsten_Incandescent_Light = 3,
+  Flash = 4,
+  Fine_Weather = 9,
+  Cloudy_Weather = 10,
+  Shade = 11,
+  Daylight_Fluorescent = 12,    //  (D 5700 - 7100K)
+  Day_White_Fluorescent = 13,   // (N 4600 - 5400K)
+  Cool_White_Fluorescent = 14,  // (W 3900 - 4500K)
+  White_Fluorescent = 15,       // (WW 3200 - 3700K)
+  Standard_A = 17,              // Standard light A
+  Standard_B = 18,
+  Standard_C = 19,
+  D55 = 20,
+  D65 = 21,
+  D75 = 22,
+  D50 = 23,
+  ISO_Studio_Tungsten = 24,
 };
 
 inline const char *to_str(Illuminant i)
 {
-#define X(v) case Illuminant::v: return #v
+#define X(v) \
+  case Illuminant::v: return #v
   switch (i) {
     X(Unknown);
     X(Daylight);
@@ -243,6 +267,61 @@ inline const char *to_str(Illuminant i)
     X(D50);
     X(ISO_Studio_Tungsten);
   }
+#undef X
+  std::abort();
+}
+
+inline void illuminant_chromaticity(Illuminant i, double *x, double *y)
+{
+#define CASE(v) case Illuminant::v
+#define RET(_x, _y) \
+  *x = _x;          \
+  *y = _y;          \
+  return
+  switch (i) {
+    CASE(Unknown) :
+      RET(0.3333, 0.3333);
+
+    CASE(Daylight) :
+      CASE(D65) :
+      CASE(Fine_Weather) :
+      RET(031272, 0.32903);
+
+    CASE(Cloudy_Weather) :
+      CASE(Shade) :
+      CASE(D75) :
+      RET(0.29902, 0.31485);
+
+    CASE(Daylight_Fluorescent) :
+      CASE(Day_White_Fluorescent) :
+      RET(0.31310, 0.33727);  // I got nothing...
+
+    CASE(Fluorescent) :
+      CASE(Cool_White_Fluorescent) :
+      RET(0.37208, 0.37529);
+    CASE(White_Fluorescent) :
+      RET(0.40910, 0.39430);
+
+    CASE(Tungsten_Incandescent_Light) :
+      CASE(ISO_Studio_Tungsten) :
+      CASE(Standard_A) :
+      RET(0.44757, 0.40745);
+
+    CASE(Standard_B) :
+      RET(0.34842, 0.35161);
+
+    CASE(Standard_C) :
+      RET(0.31006, 0.31616);
+
+    CASE(Flash) :
+      CASE(D55) :
+      RET(0.33242, 0.34743);
+
+    CASE(D50) :
+      RET(0.34567, 0.35850);
+  }
+#undef CASE
+#undef RET
   std::abort();
 }
 
@@ -259,8 +338,43 @@ struct Tag {
     return *this;
   }
 
+  operator bool() const
+  {
+    return is_set;
+  }
+
+  const T &value_or(const T &fallback) const
+  {
+    if (is_set) {
+      return value;
+    } else {
+      return fallback;
+    }
+  }
+
   operator T &() { return value; }
   operator const T &() const { return value; }
+};
+
+struct DateTime {
+  int32_t year{0};
+  int8_t month{0};
+  int8_t day{0};
+
+  int8_t hour{0};
+  int8_t minute{0};
+  int8_t second{0};
+
+  uint16_t millis{0};
+  uint32_t timezone_offset{0};
+
+  inline int64_t monotonic() const
+  {
+    int64_t m = ((year * 12) + month) * 31 + day;
+    m = ((m * 24 + hour - timezone_offset) * 60 + minute) * 60 + second;
+    m = m * 1000 + millis;
+    return m;
+  }
 };
 
 struct ImageData {
@@ -280,17 +394,29 @@ struct ImageData {
 };
 
 struct ExifIFD {
-  // Shot
   Tag<rational64u> exposure_time;
+  Tag<rational64u> focal_length;
   Tag<rational64u> f_number;
   Tag<uint16_t> iso;
   Tag<uint16_t> exposure_program;
-
-  // Lens
-  Tag<rational64u> focal_length;
-  Tag<rational64u> aperture_value;
+  Tag<DateTime> date_time_original;
+  Tag<DateTime> date_time_digitized;
 
   Tag<CharData> exif_version;
+
+  Tag<CharData> camera_owner_name;
+  Tag<CharData> body_serial_number;
+
+  Tag<CharData> lens_make;
+  Tag<CharData> lens_model;
+  Tag<CharData> lens_serial_number;
+
+  Tag<CharData> image_title;
+  Tag<CharData> photographer;
+  Tag<CharData> image_editor;  //< A person.
+  Tag<CharData> raw_developing_software;
+  Tag<CharData> image_editing_software;
+  Tag<CharData> metadata_editing_software;
 };
 
 struct ExifData {
@@ -305,8 +431,7 @@ struct ExifData {
   Tag<CharData> model;
   Tag<CharData> software;
   Tag<CharData> processing_software;
-  Tag<CharData> date_time;
-  Tag<CharData> date_time_original;
+  Tag<DateTime> date_time;
 
   Tag<vla<rational64s, 12>> color_matrix_1;
   Tag<vla<rational64s, 12>> color_matrix_2;
@@ -316,7 +441,12 @@ struct ExifData {
   Tag<vla<rational64s, 12>> calibration_matrix_2;
   Tag<Illuminant> calibration_illuminant_1;
   Tag<Illuminant> calibration_illuminant_2;
+  Tag<vla<rational64u, 4>> as_shot_neutral;
+  Tag<std::array<rational64u, 2>> as_shot_white_xy;
   Tag<vla<rational64u, 4>> analog_balance;
+
+  Tag<rational64s> apex_aperture_value;
+  Tag<rational64s> apex_shutter_speed_value;
 
   ExifIFD exif;
 
@@ -344,6 +474,7 @@ struct ExifData {
   }
 };
 
+ParseResult<ExifData> read_exif(const char *buffer, size_t length);
 ParseResult<ExifData> read_exif(const std::filesystem::path &path);
 
 size_t write_exif_data(const ExifData &data, std::vector<uint8_t> &output);
