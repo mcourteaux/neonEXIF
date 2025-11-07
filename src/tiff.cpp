@@ -124,7 +124,7 @@ inline ParseResult<bool> parse_tag(Reader &r, Tag<typename TagInfo::cpp_type> &t
         return true;
       } else if constexpr (std::is_same_v<BType, rational64s> || std::is_same_v<BType, rational64u>) {
         int mark = r.ptr;
-        r.seek(entry.value);
+        RETURN_IF_OPT_ERROR(r.seek(entry.value));
         if constexpr (TagInfo::count_spec::exif_count == 1) {
           tag.value.num = r.read_u32();
           tag.value.denom = r.read_u32();
@@ -142,7 +142,7 @@ inline ParseResult<bool> parse_tag(Reader &r, Tag<typename TagInfo::cpp_type> &t
         }
         tag.parsed_from = tag_idval;
         tag.is_set = true;
-        r.seek(mark);
+        RETURN_IF_OPT_ERROR(r.seek(mark));
         return true;
       } else if constexpr (std::is_same_v<BType, DateTime>) {
         ASSERT_OR_PARSE_ERROR(entry.count >= 18, CORRUPT_DATA, "DateTime value not long enough", tag_str);
@@ -262,7 +262,7 @@ ParseResult<bool> find_subifd(Reader &r, ifd_entry &entry, const char *tag_str)
 
 std::optional<ParseError> parse_makernote_ifd(Reader &r, ImageData *current_image, ExifData &data, uint32_t *next_offset, uint32_t ifd_type)
 {
-  r.seek(*next_offset);
+  RETURN_IF_OPT_ERROR(r.seek(*next_offset));
 
   uint16_t num_entries = r.read_u16();
   DEBUG_PRINT("Num IFD entries: %d", num_entries);
@@ -282,7 +282,7 @@ std::optional<ParseError> parse_makernote_ifd(Reader &r, ImageData *current_imag
 
 std::optional<ParseError> parse_exif_ifd(Reader &r, ExifData &data, uint32_t exif_offset, uint32_t *next_offset)
 {
-  r.seek(exif_offset);
+  RETURN_IF_OPT_ERROR(r.seek(exif_offset));
 
   uint16_t num_entries = r.read_u16();
   DEBUG_PRINT("Num EXIF IFD entries: %d", num_entries);
@@ -340,7 +340,7 @@ std::optional<ParseError> parse_exif_ifd(Reader &r, ExifData &data, uint32_t exi
 
 std::optional<ParseError> parse_tiff_ifd(Reader &r, ExifData &data, uint32_t ifd_offset, ImageData *current_image, int16_t ifd_type, uint32_t *next_offset)
 {
-  r.seek(ifd_offset);
+  RETURN_IF_OPT_ERROR(r.seek(ifd_offset));
 
   uint16_t num_entries = r.read_u16();
   DEBUG_PRINT("IFD at offset: %d -> Num entries: %d", ifd_offset, num_entries);
@@ -480,7 +480,9 @@ std::optional<ParseError> read_tiff(Reader &r, ExifData &data)
       case Reader::SubIFDRef::OTHER:
         do {
           ImageData *current_image = &data.images[data.num_images++];
-          parse_tiff_ifd(r, data, next_offset, current_image, ifd_type, &next_offset);
+          if (auto error = parse_tiff_ifd(r, data, next_offset, current_image, ifd_type, &next_offset)) {
+            return error;
+          }
         } while (next_offset != 0);
         ref.parsed = true;
         break;

@@ -20,6 +20,9 @@ namespace {
   if (!(cond)) {                                     \
     return PARSE_ERROR(code, (msg), (what));         \
   }
+#define RETURN_IF_OPT_ERROR(_call) \
+  if (auto err = _call)            \
+  return err.value()
 
 #define LOG_WARNING(reader, msg, what)                      \
   do {                                                      \
@@ -55,8 +58,18 @@ struct Reader {
 
   int ptr{0};
 
-  inline void skip(int num) { ptr += num; }
-  inline void seek(int offset) { ptr = offset; }
+  inline std::optional<ParseError> seek(int offset)
+  {
+    ASSERT_OR_PARSE_ERROR(offset < file_length, CORRUPT_DATA, "Seek out of bounds", nullptr);
+    ptr = offset;
+    return std::nullopt;
+  }
+  inline std::optional<ParseError> skip(int num)
+  {
+    ASSERT_OR_PARSE_ERROR(ptr + num < file_length, CORRUPT_DATA, "Skip out of bounds", nullptr);
+    ptr += num;
+    return std::nullopt;
+  }
 
   template <typename T>
   inline T read()

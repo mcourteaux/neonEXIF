@@ -9,7 +9,6 @@ namespace nexif {
 
 bool debug_print_enabled = false;
 
-
 namespace tiff {
 std::optional<ParseError> read_tiff(Reader &r, ExifData &data);
 size_t write_tiff(Writer &w, const ExifData &data);
@@ -21,16 +20,23 @@ bool guess_file_type(Reader &reader)
 {
   const char *data = reader.data;
   bool byte_order_indicator_found = false;
-  if (data[0] == 'I' && data[1] == 'I') {
+  if (data[0] == char(0xff) && data[1] == char(0xd8)) {
+    // JPEG SOI marker
+    reader.file_type = JPEG;
+    reader.file_type_variant = STANDARD;
+    DEBUG_PRINT("Detected JPEG");
+    return true;
+  } else if (data[0] == 'I' && data[1] == 'I') {
     reader.byte_order = Intel;
     DEBUG_PRINT("Byte order Intel");
     byte_order_indicator_found = true;
+    reader.skip(2);
   } else if (data[0] == 'M' && data[1] == 'M') {
     reader.byte_order = Minolta;
     DEBUG_PRINT("Byte order Minolta");
     byte_order_indicator_found = true;
+    reader.skip(2);
   }
-  reader.skip(2);
 
   uint16_t magic = reader.read<uint16_t>();
 
