@@ -21,6 +21,7 @@ int main(int argc, char **argv)
   };
   in.close();
 
+  nexif::enable_debug_print = true;
   nexif::ExifData exif_data = generate_sample_exif_data();
   std::vector<uint8_t> exif_binary = nexif::generate_exif_jpeg_binary_data(exif_data);
 

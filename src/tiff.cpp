@@ -4,6 +4,7 @@
 #include <cassert>
 #include <cstring>
 #include <optional>
+#include <bit>
 
 namespace nexif {
 namespace tiff {
@@ -50,6 +51,18 @@ inline size_t write_ifd_entry(Writer &w, const ifd_entry &e)
   w.write_u32(e.count);
   w.write_u32(e.value);
   return pos;
+}
+
+ParseResult<DateTime> parse_date_time(std::string_view str)
+{
+  ASSERT_OR_PARSE_ERROR(str.length() >= 18, CORRUPT_DATA, "DateTime value not long enough", str.data());
+  int Y, M, D, h, m, s;
+  DEBUG_PRINT("Date string: %.*s\n", int(str.length()), str.data());
+  std::sscanf(str.data(), "%04d:%02d:%02d %02d:%02d:%02d", &Y, &M, &D, &h, &m, &s);
+  DateTime dt;
+  dt.year = Y, dt.month = M, dt.day = D;
+  dt.hour = h, dt.minute = m, dt.second = s;
+  return dt;
 }
 
 template <typename T>
@@ -145,15 +158,17 @@ inline ParseResult<bool> parse_tag(Reader &r, Tag<typename TagInfo::cpp_type> &t
         RETURN_IF_OPT_ERROR(r.seek(mark));
         return true;
       } else if constexpr (std::is_same_v<BType, DateTime>) {
-        ASSERT_OR_PARSE_ERROR(entry.count >= 18, CORRUPT_DATA, "DateTime value not long enough", tag_str);
         std::string_view str{r.data + entry.value, entry.count};
-        int Y, M, D, h, m, s;
-        DEBUG_PRINT("Date string: %.*s\n", int(str.length()), str.data());
-        std::sscanf(str.data(), "%04d:%02d:%02d %02d:%02d:%02d", &Y, &M, &D, &h, &m, &s);
-        tag.value.year = Y, tag.value.month = M, tag.value.day = D;
-        tag.value.hour = h, tag.value.minute = m, tag.value.second = s;
-        tag.is_set = true;
-        tag.parsed_from = tag_idval;
+        ParseResult<DateTime> r = parse_date_time(str);
+        if (r) {
+          DateTime dt = r.value();
+          tag.value.year = dt.year, tag.value.month = dt.month, tag.value.day = dt.day;
+          tag.value.hour = dt.hour, tag.value.minute = dt.minute, tag.value.second = dt.second;
+          tag.is_set = true;
+          tag.parsed_from = tag_idval;
+        } else {
+          return r.error();
+        }
         return true;
       } else if (entry.size() <= 4) {
         tag.value = (typename TagInfo::cpp_type)fetch_entry_value<BType>(entry, 0, r);
@@ -441,7 +456,7 @@ std::optional<ParseError> parse_tiff_ifd(Reader &r, ExifData &data, uint32_t ifd
 
 std::optional<ParseError> read_tiff(Reader &r, ExifData &data)
 {
-  r.seek(4);
+  RETURN_IF_OPT_ERROR(r.seek(4));
   uint32_t root_ifd_offset = r.read_u32();
   DEBUG_PRINT("root IFD offset: %d", root_ifd_offset);
 
@@ -456,7 +471,7 @@ std::optional<ParseError> read_tiff(Reader &r, ExifData &data)
       return error;
     }
 
-    ASSERT_OR_PARSE_ERROR(ifd_offset % 2 == 0, CORRUPT_DATA, "IFD must align to word boundary", "root IFD");
+    RELAXED_ASSERT_PARSE_ERROR_OR_WARNING(ifd_offset % 2 == 0, r, CORRUPT_DATA, "IFD must align to word boundary", "root IFD");
     if (next_ifd_offset < r.file_length && next_ifd_offset != 0) {
       ifd_offset = next_ifd_offset;
       ifd_type = IFD_BitMasks::IFD1;  // We now go to thumbnails
@@ -472,7 +487,12 @@ std::optional<ParseError> read_tiff(Reader &r, ExifData &data)
       case Reader::SubIFDRef::EXIF:
         do {
           if (auto error = parse_exif_ifd(r, data, next_offset, &next_offset)) {
-            return error;
+            if (r.strict_mode) {
+              return error;
+            } else {
+              r.warnings.emplace_back(error->message, error->what);
+              break;
+            }
           }
         } while (next_offset != 0);
         ref.parsed = true;
@@ -481,7 +501,12 @@ std::optional<ParseError> read_tiff(Reader &r, ExifData &data)
         do {
           ImageData *current_image = &data.images[data.num_images++];
           if (auto error = parse_tiff_ifd(r, data, next_offset, current_image, ifd_type, &next_offset)) {
-            return error;
+            if (r.strict_mode) {
+              return error;
+            } else {
+              r.warnings.emplace_back(error->message, error->what);
+              break;
+            }
           }
         } while (next_offset != 0);
         ref.parsed = true;
@@ -585,6 +610,7 @@ void write_tiff_tag(IFD_Writer &w, const Tag<typename TagInfo::cpp_type> &tag)
         DEBUG_PRINT("Unexpected date time string length: %s (len = %d)", buffer, num);
       }
       write_tiff_tag_string<TagInfo>(w, buffer, num + 1);
+      // TODO write subsecond
     } else {
       if constexpr (TagInfo::count_spec::cpp_count == 1) {
         if constexpr (std::is_trivial_v<cppt>) {
@@ -648,14 +674,15 @@ void add_data_offset_to_non_inlined_values(IFD_Writer &w)
   for (int i = 0; i < w.num_tags_written; ++i) {
     size_t ifd_entry_offset = sizeof(ifd_entry) * i;
 
+    uint16_t tag = w.tags_writer.read_u16(ifd_entry_offset);
     DType type = (DType)w.tags_writer.read_u16(ifd_entry_offset + 2);
     uint32_t count = w.tags_writer.read_u32(ifd_entry_offset + 4);
     int required_bytes = size_of_dtype(type) * count;
     assert(required_bytes > 0);
     if (required_bytes > 4) {
-      auto value_offset = ifd_entry_offset + 8;
+      uint32_t value_offset = ifd_entry_offset + (2 + 2 + 4);
       uint32_t offset = w.tags_writer.read_u32(value_offset);
-      DEBUG_PRINT("rewrite offset value: %u to %u", offset, offset + w.data_offset);
+      DEBUG_PRINT("rewrite 0x%04x offset value: %u to %u", tag, offset, offset + w.data_offset);
       w.tags_writer.overwrite(value_offset, offset + w.data_offset);
       num_adjusted++;
     }
@@ -671,8 +698,11 @@ size_t write_ifd(Writer &w, IFD_Writer &ifd_w)
     + ifd_w.num_tags_written * sizeof(ifd_entry)  // tags
     + sizeof(uint32_t)                            // offset to next ifd
     ;
+  assert(ifd_w.num_tags_written * sizeof(ifd_entry) == ifd_w.tags.size());
   DEBUG_PRINT(" ifd_offset: %u", ifd_w.ifd_offset);
   DEBUG_PRINT("data_offset: %u", ifd_w.data_offset);
+  DEBUG_PRINT("tags_size  : %zu", ifd_w.tags.size());
+  DEBUG_PRINT("data_size  : %zu", ifd_w.data.size());
   add_data_offset_to_non_inlined_values(ifd_w);
 
   w.write_u16(ifd_w.num_tags_written);
@@ -688,9 +718,15 @@ size_t write_ifd(Writer &w, IFD_Writer &ifd_w)
 size_t write_tiff(Writer &w, const ExifData &data)
 {
   size_t tiff_header_pos = w.current_in_tiff_pos();
-  // Intel byte order!
-  w.write_u8('I');
-  w.write_u8('I');
+  if (std::endian::native == std::endian::little) {
+    // Intel byte order!
+    w.write_u8('I');
+    w.write_u8('I');
+  } else {
+    // Minolta byte order!
+    w.write_u8('M');
+    w.write_u8('M');
+  }
   w.write_u8(42);
   w.write_u8(0);
 

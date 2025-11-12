@@ -7,19 +7,27 @@
 #include <vector>
 #include <cassert>
 #include <cstring>
+#include <array>
 #include <bit>
 
 namespace nexif {
 
 inline int __indent = 0;
 inline bool enable_debug_print = false;
+inline int default_debug_print(const char *v)
+{
+  return std::printf("\033[2m[NeonEXIF] %s\033[0m\n", v);
+}
+inline int (*debug_print_fn)(const char *) = default_debug_print;
 struct Indenter {
   Indenter() { __indent++; }
   ~Indenter() { __indent--; }
 };
-#define DEBUG_PRINT(fmt, args...)                                        \
-  if (enable_debug_print) {                                              \
-    std::printf("%*s\033[2m" fmt "\033[0m\n", __indent * 4, "", ##args); \
+#define DEBUG_PRINT(fmt, args...)                                           \
+  if (enable_debug_print) {                                                 \
+    char _buf[1024];                                                        \
+    std::snprintf(_buf, sizeof(_buf), "%*s" fmt, __indent * 4, "", ##args); \
+    debug_print_fn(_buf);                                                   \
   }
 
 template <typename T>
@@ -46,6 +54,7 @@ struct ParseError {
     CANNOT_OPEN_FILE,
     UNKNOWN_FILE_TYPE,
     CORRUPT_DATA,
+    TAG_NOT_FOUND,
     INTERNAL_ERROR,
   } code;
   const char *message{nullptr};
@@ -58,6 +67,7 @@ inline const char *to_str(ParseError::Code c)
     case ParseError::CANNOT_OPEN_FILE: return "Cannot open file";
     case ParseError::UNKNOWN_FILE_TYPE: return "Unknown file type";
     case ParseError::CORRUPT_DATA: return "Corrupt data";
+    case ParseError::TAG_NOT_FOUND: return "Tag not found";
     case ParseError::INTERNAL_ERROR: return "Internal error";
   }
   std::abort();
@@ -93,12 +103,19 @@ struct ParseResult {
   }
 };
 
-enum FileType { TIFF,
-                CIFF,
-                JPEG };
-enum FileTypeVariant { STANDARD,
-                       TIFF_ORF,
-                       TIFF_RW2 };
+enum FileType {
+  TIFF,
+  CIFF,
+  JPEG,
+  FUJIFILM_RAF,
+  MRW,
+  SIGMA_FOVB
+};
+enum FileTypeVariant {
+  STANDARD,
+  TIFF_ORF,
+  TIFF_RW2,
+};
 
 inline const char *to_str(FileType ft)
 {
@@ -106,6 +123,32 @@ inline const char *to_str(FileType ft)
     case TIFF: return "TIFF";
     case CIFF: return "CIFF";
     case JPEG: return "JPEG";
+    case FUJIFILM_RAF: return "RAF";
+    case MRW: return "MRW";
+    case SIGMA_FOVB: return "FOVb";
+  }
+  std::abort();
+}
+
+inline const char *to_str(FileType ft, FileTypeVariant v)
+{
+  switch (ft) {
+    case TIFF:
+      switch (v) {
+        case STANDARD: return "TIFF";
+        case TIFF_ORF: return "TIFF/ORF";
+        case TIFF_RW2: return "TIFF/RW2";
+        default: std::abort();
+      }
+    case CIFF:
+      switch (v) {
+        case STANDARD: return "CIFF";
+        default: std::abort();
+      }
+    case JPEG: return "JPEG";
+    case FUJIFILM_RAF: return "RAF";
+    case MRW: return "MRW";
+    case SIGMA_FOVB: return "FOVb";
   }
   std::abort();
 }
@@ -138,7 +181,9 @@ struct CharData {
       ptr_offset = 0;
       assert(len == 0);
     } else {
-      ptr_offset = (ptr - (const char *)this);
+      ptrdiff_t ptrdiff = (ptr - (const char *)this);
+      assert(static_cast<int16_t>(ptrdiff) == ptrdiff && "data not close enough in memory to the CharData");
+      ptr_offset = ptrdiff;
     }
     length = len;
     return *this;
@@ -149,6 +194,16 @@ struct CharData {
     if (ptr_offset == 0)
       return nullptr;
     return (((const char *)this) + ptr_offset);
+  }
+
+  const std::string_view view() const
+  {
+    return {data(), length};
+  }
+
+  const std::string str() const
+  {
+    return {data(), length};
   }
 };
 
@@ -161,6 +216,9 @@ struct rational {
 
 using rational64s = rational<int32_t>;
 using rational64u = rational<uint32_t>;
+
+rational64u double_to_rational64u(double value, double accuracy = 1e-4);
+rational64s double_to_rational64s(double value, double accuracy = 1e-4);
 
 /** Variable length array */
 template <typename T, uint8_t Max>
@@ -352,8 +410,17 @@ struct Tag {
     }
   }
 
-  operator T &() { return value; }
-  operator const T &() const { return value; }
+  T &operator->() { return value; }
+  const T operator->() const { return value; }
+  T &operator*() { return value; }
+  const T operator*() const { return value; }
+
+  void clear()
+  {
+    is_set = false;
+    parsed_from = 0;
+    value = {};
+  }
 };
 
 struct DateTime {
@@ -376,6 +443,10 @@ struct DateTime {
     return m;
   }
 };
+
+namespace tiff {
+ParseResult<DateTime> parse_date_time(std::string_view str);
+}
 
 struct ImageData {
   SubfileType type{NONE};
@@ -413,7 +484,7 @@ struct ExifIFD {
 
   Tag<CharData> image_title;
   Tag<CharData> photographer;
-  Tag<CharData> image_editor;  //< A person.
+  Tag<CharData> image_editor;  ///< A person.
   Tag<CharData> raw_developing_software;
   Tag<CharData> image_editing_software;
   Tag<CharData> metadata_editing_software;
@@ -453,14 +524,49 @@ struct ExifData {
   char string_data[4096];
   int string_data_ptr{0};
 
+  ExifData() = default;
+  ExifData &operator=(const ExifData &o)
+  {
+    std::memcpy((void *)this, (void *)&o, sizeof(ExifData));
+    return *this;
+  }
+  ExifData &operator=(ExifData &&o)
+  {
+    std::memcpy((void *)this, (void *)&o, sizeof(ExifData));
+    return *this;
+  }
+  ExifData(const ExifData &o)
+  {
+    operator=(o);
+  }
+  ExifData(ExifData &&o)
+  {
+    operator=(std::move(o));
+  }
+
+  const ImageData *full_resolution_image() const
+  {
+    for (int i = 0; i < num_images; ++i) {
+      if (images[i].type == FULL_RESOLUTION) {
+        return &images[i];
+      }
+    }
+    return nullptr;
+  }
+
   const char *store_string_data(const char *ptr, int count)
   {
-    assert(string_data_ptr + count < sizeof(string_data));
+    assert(string_data_ptr + count < sizeof(string_data) && "out of string storage");
     char *dst = &string_data[string_data_ptr];
     std::memcpy(dst, ptr, count);
     string_data[string_data_ptr + count] = 0;
     string_data_ptr += count + 1;
     return dst;
+  }
+
+  const char *store_string_data(const std::string &str)
+  {
+    return store_string_data(str.data(), str.length());
   }
 
   CharData store_chardata(const char *ptr, int count = 0)
@@ -472,10 +578,25 @@ struct ExifData {
     assert(count <= 0xffff);
     return CharData{res, uint16_t(count)};
   }
+
+  CharData store_chardata(const std::string &str)
+  {
+    return store_chardata(str.data(), str.length());
+  }
 };
 
-ParseResult<ExifData> read_exif(const char *buffer, size_t length);
-ParseResult<ExifData> read_exif(const std::filesystem::path &path);
+ParseResult<ExifData> read_exif(
+  const char *buffer,
+  size_t length,
+  FileType *ft = nullptr,
+  FileTypeVariant *fvt = nullptr
+);
+
+ParseResult<ExifData> read_exif(
+  const std::filesystem::path &path,
+  FileType *ft = nullptr,
+  FileTypeVariant *fvt = nullptr
+);
 
 size_t write_exif_data(const ExifData &data, std::vector<uint8_t> &output);
 

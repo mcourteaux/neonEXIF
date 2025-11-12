@@ -32,8 +32,21 @@ namespace {
 
 }  // namespace
 
-enum ByteOrder { Intel,
-                 Minolta };
+#define RELAXED_ASSERT_PARSE_ERROR_OR_WARNING(cond, r, code, msg, what) \
+  if (!(cond)) {                                                        \
+    if (r.strict_mode) {                                                \
+      return PARSE_ERROR(code, (msg), (what));                          \
+    } else {                                                            \
+      r.warnings.emplace_back(msg, what);                               \
+    }                                                                   \
+  }
+
+enum ByteOrder {
+  Intel = 0,
+  Little = 0,
+  Minolta = 1,
+  Big = 1
+};
 
 struct Reader {
   std::list<ParseWarning> &warnings;
@@ -43,6 +56,7 @@ struct Reader {
   const char *data{nullptr};
   size_t file_length{0};
   ByteOrder byte_order;
+  bool strict_mode{false};
 
   FileType file_type;
   FileTypeVariant file_type_variant;
@@ -58,13 +72,13 @@ struct Reader {
 
   int ptr{0};
 
-  inline std::optional<ParseError> seek(int offset)
+  [[nodiscard]] inline std::optional<ParseError> seek(int offset)
   {
     ASSERT_OR_PARSE_ERROR(offset < file_length, CORRUPT_DATA, "Seek out of bounds", nullptr);
     ptr = offset;
     return std::nullopt;
   }
-  inline std::optional<ParseError> skip(int num)
+  [[nodiscard]] inline std::optional<ParseError> skip(int num)
   {
     ASSERT_OR_PARSE_ERROR(ptr + num < file_length, CORRUPT_DATA, "Skip out of bounds", nullptr);
     ptr += num;
@@ -160,6 +174,7 @@ struct Writer {
   inline size_t write_string(const char *str, uint32_t len)
   {
     size_t old_pos = pos;
+    DEBUG_PRINT("Storing string data %u: %s", len, str);
     dst.insert(dst.begin() + old_pos, str, str + len);
     pos += len;
     return old_pos;

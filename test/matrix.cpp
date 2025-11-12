@@ -1,5 +1,4 @@
 #include <cstdio>
-#include <iostream>
 #include <chrono>
 
 #include "neonexif/neonexif.hpp"
@@ -13,7 +12,7 @@ void print_mark_str(const nexif::Tag<nexif::CharData> &tag, int w)
     while (s > 0 && tag.value.data() + s - 1 == 0) {
       s--;
     }
-    std::printf(" \033[32m%-*.*s\033[0m", w, s, tag.value.data());
+    std::printf(" \033[32m%-*.*s\033[0m", w, int(s), tag.value.data());
   } else {
     std::printf(" \033[31m%-*s\033[0m", w, "(null)");
   }
@@ -50,6 +49,10 @@ int main(int argc, char **argv)
   std::printf("Walking %s ...\n\n", argv[1]);
 
   int col = 0;
+  print_col_header(col, 2, "img0 width");
+  print_col_header(col, 2, "img0 height");
+  print_col_header(col, 2, "img0 samples/pixel");
+  col += 2;
   print_col_header(col, 2, "exif version");
   print_col_header(col, 2, "f-number");
   print_col_header(col, 2, "focal length");
@@ -90,7 +93,9 @@ int main(int argc, char **argv)
     std::filesystem::path relpath = file.lexically_relative(dir);
 
     auto t0 = std::chrono::high_resolution_clock::now();
-    auto result = nexif::read_exif(file);
+    nexif::FileType ft;
+    nexif::FileTypeVariant ftv;
+    auto result = nexif::read_exif(file, &ft, &ftv);
     auto t1 = std::chrono::high_resolution_clock::now();
 
     if (!result) {
@@ -100,6 +105,10 @@ int main(int argc, char **argv)
     }
     auto data = result.value();
 
+    PRINT_MARK(images[0].image_width);
+    PRINT_MARK(images[0].image_height);
+    PRINT_MARK(images[0].samples_per_pixel);
+    std::printf("| ");
     PRINT_MARK(exif.exif_version);
     PRINT_MARK(exif.f_number);
     PRINT_MARK(exif.focal_length);
@@ -128,6 +137,7 @@ int main(int argc, char **argv)
 
     double us = std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count() * 1e-3;
     printf(" %4.0fus", us);
+    printf(" \033[2m%8s\033[0m", nexif::to_str(ft, ftv));
 
     printf("  %s\n", relpath.c_str());
   }

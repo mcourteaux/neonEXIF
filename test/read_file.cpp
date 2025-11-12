@@ -108,6 +108,7 @@ void print_image(const nexif::ImageData &id)
 
 int main(int argc, char **argv)
 {
+  nexif::enable_debug_print = true;
   if (argc == 2) {
     std::printf("Reading %s\n", argv[1]);
     auto t0 = std::chrono::high_resolution_clock::now();
