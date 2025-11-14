@@ -41,13 +41,6 @@ namespace {
     }                                                                   \
   }
 
-enum ByteOrder {
-  Intel = 0,
-  Little = 0,
-  Minolta = 1,
-  Big = 1
-};
-
 struct Reader {
   std::list<ParseWarning> &warnings;
   Reader(std::list<ParseWarning> &warnings) :
@@ -55,7 +48,7 @@ struct Reader {
 
   const char *data{nullptr};
   size_t file_length{0};
-  ByteOrder byte_order;
+  std::endian byte_order;
   bool strict_mode{false};
 
   FileType file_type;
@@ -90,11 +83,17 @@ struct Reader {
   {
     const T t = *(const T *)&data[ptr];
     ptr += sizeof(T);
-    if (byte_order == Minolta) {
+    if (byte_order != std::endian::native) {
       return nexif::byteswap(t);
     } else {
       return t;
     }
+  }
+
+  inline void read_4bytes(uint8_t *dst)
+  {
+    std::memcpy(dst, &data[ptr], 4);
+    ptr += 4;
   }
 
   // clang-format off
@@ -112,6 +111,7 @@ struct Reader {
 
   struct SubIFDRef {
     uint32_t offset;
+    uint32_t length;
     enum Type {
       EXIF,
       GPS,

@@ -56,6 +56,7 @@ int main(int argc, char **argv)
   print_col_header(col, 2, "exif version");
   print_col_header(col, 2, "f-number");
   print_col_header(col, 2, "focal length");
+  print_col_header(col, 2, "lens specification");
   print_col_header(col, 2, "iso");
   print_col_header(col, 2, "date-time original");
   col += 2;
@@ -112,6 +113,7 @@ int main(int argc, char **argv)
     PRINT_MARK(exif.exif_version);
     PRINT_MARK(exif.f_number);
     PRINT_MARK(exif.focal_length);
+    PRINT_MARK(exif.lens_specification);
     PRINT_MARK(exif.iso);
     PRINT_MARK(exif.date_time_original);
 
@@ -130,10 +132,10 @@ int main(int argc, char **argv)
 
     std::printf(" |  ");
 
-    print_mark_str(data.make, 12);
-    print_mark_str(data.model, 20);
+    print_mark_str(data.make, 15);
+    print_mark_str(data.model, 25);
     print_mark_str(data.exif.lens_make, 20);
-    print_mark_str(data.exif.lens_model, 20);
+    print_mark_str(data.exif.lens_model, 30);
 
     double us = std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count() * 1e-3;
     printf(" %4.0fus", us);

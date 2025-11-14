@@ -33,20 +33,34 @@ struct Indenter {
 template <typename T>
 inline T byteswap(T t)
 {
-#ifdef __cpp_lib_byteswap
-  return std::byteswap(t);
-#else
-  static_assert(sizeof(T) <= 8);
-  static_assert((sizeof(T) & (sizeof(T) - 1)) == 0);
-  if constexpr (sizeof(T) == 1)
+  if constexpr (std::is_same_v<T, float>) {
+    uint32_t v;
+    std::memcpy(&v, &t, 4);
+    v = byteswap(t);
+    std::memcpy(&t, &v, 4);
     return t;
-  if constexpr (sizeof(T) == 2)
-    return __builtin_bswap16(t);
-  if constexpr (sizeof(T) == 4)
-    return __builtin_bswap32(t);
-  if constexpr (sizeof(T) == 8)
-    return __builtin_bswap64(t);
+  } else if constexpr (std::is_same_v<T, double>) {
+    uint64_t v;
+    std::memcpy(&v, &t, 8);
+    v = byteswap(t);
+    std::memcpy(&t, &v, 8);
+    return t;
+  } else {
+#ifdef __cpp_lib_byteswap
+    return std::byteswap(t);
+#else
+    static_assert(sizeof(T) <= 8);
+    static_assert((sizeof(T) & (sizeof(T) - 1)) == 0);
+    if constexpr (sizeof(T) == 1)
+      return t;
+    if constexpr (sizeof(T) == 2)
+      return __builtin_bswap16(t);
+    if constexpr (sizeof(T) == 4)
+      return __builtin_bswap32(t);
+    if constexpr (sizeof(T) == 8)
+      return __builtin_bswap64(t);
 #endif
+  }
 }
 
 struct ParseError {
@@ -212,6 +226,10 @@ struct rational {
   T num, denom;
   operator float() const { return float(num) / denom; }
   operator double() const { return double(num) / denom; }
+
+  inline bool operator==(const rational<T> &other) const {
+    return num == other.num && denom == other.denom;
+  }
 };
 
 using rational64s = rational<int32_t>;
@@ -478,6 +496,7 @@ struct ExifIFD {
   Tag<CharData> camera_owner_name;
   Tag<CharData> body_serial_number;
 
+  Tag<std::array<rational64u, 4>> lens_specification;  ///< (MinFocalLen, MaxFocalLen, MinFNum@MinFL, MinFNum@MaxFL)
   Tag<CharData> lens_make;
   Tag<CharData> lens_model;
   Tag<CharData> lens_serial_number;

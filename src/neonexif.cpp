@@ -1,5 +1,6 @@
 #include "neonexif/neonexif.hpp"
 #include "neonexif/reader.hpp"
+#include "neonexif/tiff.hpp"
 
 #include <cstring>
 #include <cassert>
@@ -10,11 +11,6 @@
 namespace nexif {
 
 bool debug_print_enabled = false;
-
-namespace tiff {
-std::optional<ParseError> read_tiff(Reader &r, ExifData &data);
-size_t write_tiff(Writer &w, const ExifData &data);
-};  // namespace tiff
 
 /**
  * Taken from https://stackoverflow.com/a/42197629/155137
@@ -64,21 +60,23 @@ namespace {
 
 bool guess_file_type(Reader &reader)
 {
+  using namespace std::string_view_literals;
   const char *data = reader.data;
 
-  using namespace std::string_view_literals;
   const std::string_view fujifilm_magic = "FUJIFILMCCD-RAW"sv;
   if (std::memcmp(data, fujifilm_magic.data(), fujifilm_magic.length()) == 0) {
     reader.file_type = FUJIFILM_RAF;
     reader.file_type_variant = STANDARD;
     return true;
   }
+
   const std::string_view mrw_magic = "\0MRM"sv;
   if (std::memcmp(data, mrw_magic.data(), mrw_magic.length()) == 0) {
     reader.file_type = MRW;
     reader.file_type_variant = STANDARD;
     return true;
   }
+
   const std::string_view fovb_magic = "FOVb"sv;
   if (std::memcmp(data, fovb_magic.data(), fovb_magic.length()) == 0) {
     reader.file_type = SIGMA_FOVB;
@@ -86,55 +84,50 @@ bool guess_file_type(Reader &reader)
     return true;
   }
 
-  bool byte_order_indicator_found = false;
-  if (data[0] == char(0xff) && data[1] == char(0xd8) && data[2] == char(0xff)) {
-    // JPEG SOI marker + first byte of next marker.
-    reader.file_type = JPEG;
-    reader.file_type_variant = STANDARD;
-    reader.byte_order = ByteOrder::Minolta;
-    return true;
-  } else if (data[0] == 'I' && data[1] == 'I') {
-    reader.byte_order = Intel;
-    DEBUG_PRINT("Byte order Intel");
-    byte_order_indicator_found = true;
-    if (reader.skip(2)) {
-      return false;
-    }
-  } else if (data[0] == 'M' && data[1] == 'M') {
-    reader.byte_order = Minolta;
-    DEBUG_PRINT("Byte order Minolta");
-    byte_order_indicator_found = true;
-    if (reader.skip(2)) {
-      return false;
-    }
-  }
-
-  uint16_t magic = reader.read<uint16_t>();
-
-  if (magic == 42) {
-    reader.file_type = TIFF;
-    reader.file_type_variant = STANDARD;
-    DEBUG_PRINT("Detected TIFF");
-    return true;
-  } else if (magic == 0x4f52 || magic == 0x5352) {
-    reader.file_type = TIFF;
-    reader.file_type_variant = TIFF_ORF;
-    DEBUG_PRINT("Detected TIFF/ORF");
-    return true;
-  } else if (magic == 0x55) {
-    reader.file_type = TIFF;
-    reader.file_type_variant = TIFF_RW2;
-    DEBUG_PRINT("Detected TIFF/RW2");
-    return true;
-  }
-
   const int ciff_magic_offset = 6;
-  const char *ciff_magic = "HEAPCCDR";
-  if (std::equal(reader.data + ciff_magic_offset, reader.data + ciff_magic_offset + 8, ciff_magic)) {
+  const std::string_view ciff_magic = "HEAPCCDR"sv;
+  if (std::memcmp(data + ciff_magic_offset, ciff_magic.data(), ciff_magic.length()) == 0) {
     reader.file_type = CIFF;
     reader.file_type_variant = STANDARD;
     DEBUG_PRINT("Detected CIFF (CRW)");
     return true;
+  }
+
+  if (data[0] == char(0xff) && data[1] == char(0xd8) && data[2] == char(0xff)) {
+    // JPEG SOI marker + first byte of next marker.
+    reader.file_type = JPEG;
+    reader.file_type_variant = STANDARD;
+    reader.byte_order = std::endian::big;
+    return true;
+  } else if ((data[0] == 'I' && data[1] == 'I') || (data[0] == 'M' && data[1] == 'M')) {
+    if (data[0] == 'I') {
+      reader.byte_order = std::endian::little;
+      DEBUG_PRINT("Byte order Intel");
+    } else {
+      reader.byte_order = std::endian::big;
+      DEBUG_PRINT("Byte order Minolta");
+    }
+    if (reader.skip(2)) {
+      return false;
+    }
+    uint16_t magic = reader.read<uint16_t>();
+
+    if (magic == 42) {
+      reader.file_type = TIFF;
+      reader.file_type_variant = STANDARD;
+      DEBUG_PRINT("Detected TIFF");
+      return true;
+    } else if (magic == 0x4f52 || magic == 0x5352) {
+      reader.file_type = TIFF;
+      reader.file_type_variant = TIFF_ORF;
+      DEBUG_PRINT("Detected TIFF/ORF");
+      return true;
+    } else if (magic == 0x55) {
+      reader.file_type = TIFF;
+      reader.file_type_variant = TIFF_RW2;
+      DEBUG_PRINT("Detected TIFF/RW2");
+      return true;
+    }
   }
 
   return false;
@@ -244,7 +237,7 @@ std::optional<ParseError> read_exif(
       return PARSE_ERROR(CORRUPT_DATA, "APP1 marker not found", nullptr);
     }
     case FUJIFILM_RAF: {
-      r.byte_order = ByteOrder::Big;
+      r.byte_order = std::endian::big;
       RETURN_IF_OPT_ERROR(r.seek(0x54));
       int offset = r.read_u32() + 12;
       int length = r.read_u32();
@@ -260,7 +253,7 @@ std::optional<ParseError> read_exif(
       }
     }
     case MRW: {
-      r.byte_order = ByteOrder::Big;
+      r.byte_order = std::endian::big;
       RETURN_IF_OPT_ERROR(r.seek(4));
       int header_len = r.read_u32();
       bool tiff_found = false;

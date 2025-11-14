@@ -12,6 +12,7 @@ add_library(neonexif STATIC
   "src/neonexif.cpp"
   "src/mappedfile.cpp"
   "src/tiff.cpp"
+  "src/nikon.cpp"
 )
 target_include_directories(neonexif PUBLIC "include/")
 target_include_directories(neonexif PRIVATE "src/")

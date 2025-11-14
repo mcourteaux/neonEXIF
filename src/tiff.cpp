@@ -1,3 +1,4 @@
+#include "neonexif/tiff.hpp"
 #include "neonexif/tiff_tags.hpp"
 #include "neonexif/reader.hpp"
 
@@ -7,40 +8,23 @@
 #include <bit>
 
 namespace nexif {
+namespace makernote::nikon {
+std::optional<ParseError> parse_makernote(Reader &r, ExifData &data);
+}
+
 namespace tiff {
 
-template <typename T, bool is_enum = std::is_enum_v<T>>
-struct base_type {
-  using type = T;
-};
-
-template <typename T>
-struct base_type<T, true> {
-  using type = std::underlying_type_t<T>;
-};
-
-struct ifd_entry {
-  constexpr static int BINARY_SIZE = 2 + 2 + 4 + 4;
-  uint16_t tag;
-  DType type;
-  uint32_t count;
-  uint32_t value;
-
-  int32_t size() const
-  {
-    return count * size_of_dtype(type);
-  }
-};
-static_assert(sizeof(ifd_entry) == ifd_entry::BINARY_SIZE);
-
-inline ifd_entry read_ifd_entry(Reader &r)
+ifd_entry read_ifd_entry(Reader &r)
 {
-  uint16_t tag = r.read_u16();
-  DType type = (DType)r.read_u16();
-  uint32_t count = r.read_u32();
-  uint32_t value = r.read_u32();
-  DEBUG_PRINT("IFD entry {0x%04x %-20s, %x:%-10s, %6d, %08x = %u}", tag, to_str(tag, -1), (int)type, to_str(type), count, value, value);
-  return {tag, type, count, value};
+  ifd_entry e;
+  e.tag = r.read_u16();
+  e.type = (DType)r.read_u16();
+  if (!(e.type >= DType::BYTE && e.type <= DType::DOUBLE)) {
+    r.warnings.emplace_back("Unknown IFD entry data type", nullptr);
+  };
+  e.count = r.read_u32();
+  r.read_4bytes(e.data);
+  return e;
 }
 
 inline size_t write_ifd_entry(Writer &w, const ifd_entry &e)
@@ -49,7 +33,7 @@ inline size_t write_ifd_entry(Writer &w, const ifd_entry &e)
   w.write_u16(e.tag);
   w.write_u16((uint16_t)e.type);
   w.write_u32(e.count);
-  w.write_u32(e.value);
+  w.write<const uint8_t[4]>(e.data);
   return pos;
 }
 
@@ -65,29 +49,65 @@ ParseResult<DateTime> parse_date_time(std::string_view str)
   return dt;
 }
 
-template <typename T>
-T fetch_entry_value(const ifd_entry &entry, int idx, Reader &r)
+void debug_print_ifd_entry(Reader &r, const ifd_entry &e, const char *tag_name)
 {
-  assert(idx < entry.count);
-  int32_t elem_size = size_of_dtype(entry.type);
-  assert(sizeof(T) >= elem_size);
-  T t{0};
-  if (entry.size() <= 4) {
-    uint32_t inline_data = entry.value;
-    if (r.byte_order == Minolta) {
-      // Unswap it
-      inline_data = nexif::byteswap(inline_data);
+  if (enable_debug_print) {
+    constexpr size_t cap = 1024;
+    char buf[cap];
+    int len = 0;
+#define PRINT(args...) len += std::snprintf(buf + len, cap - len, ##args)
+    PRINT(
+      "IFD entry {0x%04x %-20s, %x:%-10s, %6d, %02x%02x%02x%02x} ",
+      e.tag, tag_name, (int)e.type, to_str(e.type), e.count,
+      e.data[0], e.data[1], e.data[2], e.data[3]
+    );
+    if (e.size() > 4) {
+      // offset!
+      PRINT("@0x%x -> ", e.offset(r));
     }
-    // Data is inline
-    std::memcpy(&t, ((char *)&inline_data) + idx * elem_size, elem_size);
-  } else {
-    // Data is elsewhere
-    std::memcpy(&t, r.data + entry.value + elem_size * idx, elem_size);
+    if (e.count < 60) {
+      if (e.type == DType::ASCII) {
+        if (e.count <= 4) {
+          PRINT("\"%.*s\"", e.count, (const char*)e.data);
+        } else {
+          PRINT("\"%.*s\"", e.count, &r.data[e.offset(r)]);
+        }
+      } else {
+        for (int i = 0; i < e.count; ++i) {
+          if (e.type == DType::SHORT) {
+            PRINT("%u ", (unsigned)fetch_entry_value<uint16_t>(e, i, r));
+          } else if (e.type == DType::SSHORT) {
+            PRINT("%d ", (int)fetch_entry_value<int16_t>(e, i, r));
+          } else if (e.type == DType::BYTE) {
+            PRINT("0x%02x ", (int)fetch_entry_value<uint8_t>(e, i, r));
+          } else if (e.type == DType::SBYTE) {
+            PRINT("0x%02x ", (int)fetch_entry_value<int8_t>(e, i, r));
+          } else if (e.type == DType::LONG) {
+            PRINT("%u ", (int)fetch_entry_value<uint32_t>(e, i, r));
+          } else if (e.type == DType::SLONG) {
+            PRINT("%d ", (int)fetch_entry_value<int32_t>(e, i, r));
+          } else if (e.type == DType::FLOAT) {
+            PRINT("%f ", fetch_entry_value<float>(e, i, r));
+          } else if (e.type == DType::DOUBLE) {
+            PRINT("%f ", fetch_entry_value<double>(e, i, r));
+          } else if (e.type == DType::RATIONAL) {
+            auto fr = fetch_entry_value<rational64u>(e, i, r);
+            PRINT("%u/%u ", fr.num, fr.denom);
+          } else if (e.type == DType::SRATIONAL) {
+            auto fr = fetch_entry_value<rational64s>(e, i, r);
+            PRINT("%d/%d ", fr.num, fr.denom);
+          }
+        }
+      }
+    }
+#undef PRINT
+    debug_print_fn(buf);
   }
-  if (r.byte_order == Minolta) {
-    t = nexif::byteswap(t);
-  }
-  return t;
+}
+
+void debug_print_ifd_entry(Reader &r, const ifd_entry &e, const char *(*tag_to_str)(uint16_t tag))
+{
+  debug_print_ifd_entry(r, e, tag_to_str(e.tag));
 }
 
 const char *to_str(uint16_t tag, uint16_t ifd_bit)
@@ -96,95 +116,10 @@ const char *to_str(uint16_t tag, uint16_t ifd_bit)
   if (tag == _tag##u && (ifd_bit & _ifd_bitmask)) {                                   \
     return #_name;                                                                    \
   }
-  ALL_IFD0_TAGS(TAG_TO_STR);
-  ALL_EXIF_TAGS(TAG_TO_STR);
+  NEXIF_ALL_IFD0_TAGS(TAG_TO_STR);
+  NEXIF_ALL_EXIF_TAGS(TAG_TO_STR);
 #undef TAG_TO_STR
   return nullptr;
-}
-
-template <typename TagInfo>
-inline ParseResult<bool> parse_tag(Reader &r, Tag<typename TagInfo::cpp_type> &tag, const ifd_entry &entry, uint16_t ifd_bit)
-{
-  using BType = base_type<typename TagInfo::scalar_cpp_type>::type;
-  constexpr uint16_t tag_idval = TagInfo::TagId;
-  if (entry.tag == tag_idval) {
-    const char *tag_str = to_str(entry.tag, ifd_bit);
-    bool matches = matches_dtype<BType>(entry.type);
-    bool fits = fits_dtype<BType>(entry.type);
-    if (matches || fits) {
-      if (TagInfo::count_spec::exif_count > 0
-          && entry.count != TagInfo::count_spec::exif_count
-          && !TagInfo::count_spec::exif_var) {
-        LOG_WARNING(r, "Warning: unexpected count for:", tag_str);
-      }
-      if (!matches) {
-        LOG_WARNING(r, "Warning: dtype did not match, but fits.", tag_str);
-      }
-      if constexpr (std::is_same_v<BType, CharData>) {
-        ASSERT_OR_PARSE_ERROR(
-          r.exif_data->string_data_ptr + entry.count < sizeof(r.exif_data->string_data),
-          INTERNAL_ERROR, "Internal error: no enough string space.", tag_str
-        );
-        if (entry.count <= 4) {
-          tag.value.set(r.store_string_data((char *)&entry.value, entry.count), entry.count);
-          DEBUG_PRINT("store inline string data of length %d: %s", entry.count, tag.value.data());
-        } else {
-          tag.value.set(r.store_string_data(r.data + entry.value, entry.count), entry.count);
-          DEBUG_PRINT("store external string data of length %d: %s", entry.count, tag.value.data());
-        }
-        tag.parsed_from = tag_idval;
-        tag.is_set = true;
-        return true;
-      } else if constexpr (std::is_same_v<BType, rational64s> || std::is_same_v<BType, rational64u>) {
-        int mark = r.ptr;
-        RETURN_IF_OPT_ERROR(r.seek(entry.value));
-        if constexpr (TagInfo::count_spec::exif_count == 1) {
-          tag.value.num = r.read_u32();
-          tag.value.denom = r.read_u32();
-        } else {
-          for (int i = 0; i < entry.count; ++i) {
-            typename TagInfo::scalar_cpp_type val;
-            val.num = r.read_u32();
-            val.denom = r.read_u32();
-            if constexpr (TagInfo::count_spec::exif_var) {
-              tag.value.push_back(val);
-            } else {
-              tag.value[i] = val;
-            }
-          }
-        }
-        tag.parsed_from = tag_idval;
-        tag.is_set = true;
-        RETURN_IF_OPT_ERROR(r.seek(mark));
-        return true;
-      } else if constexpr (std::is_same_v<BType, DateTime>) {
-        std::string_view str{r.data + entry.value, entry.count};
-        ParseResult<DateTime> r = parse_date_time(str);
-        if (r) {
-          DateTime dt = r.value();
-          tag.value.year = dt.year, tag.value.month = dt.month, tag.value.day = dt.day;
-          tag.value.hour = dt.hour, tag.value.minute = dt.minute, tag.value.second = dt.second;
-          tag.is_set = true;
-          tag.parsed_from = tag_idval;
-        } else {
-          return r.error();
-        }
-        return true;
-      } else if (entry.size() <= 4) {
-        tag.value = (typename TagInfo::cpp_type)fetch_entry_value<BType>(entry, 0, r);
-        tag.parsed_from = tag_idval;
-        tag.is_set = true;
-        return true;
-      }
-      // TODO count > 1 not yet implemented
-      return PARSE_ERROR(UNKNOWN_FILE_TYPE, "tag dtype parser not implemented", tag_str);
-    } else {
-      LOG_WARNING(r, "Dtype in tag is incorrect", tag_str);
-      return true;
-      // return PARSE_ERROR(CORRUPT_DATA, "dtype in tag is incorrect", tag_str);
-    }
-  }
-  return false;
 }
 
 std::optional<ParseError> parse_subsectime_to_millis(Reader &r, const ifd_entry &entry, uint16_t *millis)
@@ -192,9 +127,9 @@ std::optional<ParseError> parse_subsectime_to_millis(Reader &r, const ifd_entry 
   int32_t s = entry.size();
   char buf[16] = {0};
   if (s <= 4) {
-    std::memcpy(buf, &entry.value, s);
+    std::memcpy(buf, &entry.data, s);
   } else {
-    std::memcpy(buf, r.data + entry.value, std::min(int32_t(sizeof(buf)), s));
+    std::memcpy(buf, r.data + entry.offset(r), std::min(int32_t(sizeof(buf)), s));
   }
   buf[std::min(15, s)] = 0;
   int val = std::atoi(buf);
@@ -207,7 +142,7 @@ std::optional<ParseError> parse_subsectime_to_millis(Reader &r, const ifd_entry 
     for (int i = 0; s - i > 3; ++i) {
       div *= 10;
     }
-    s = (s + div / 2) / div;  // With proper rounding.
+    s = (s + (div >> 1)) / div;  // With proper rounding.
   }
   *millis = val;
   return std::nullopt;
@@ -216,10 +151,9 @@ std::optional<ParseError> parse_subsectime_to_millis(Reader &r, const ifd_entry 
 #define PARSE_TAG(_struct, _name, _entry, _ifd_bits)             \
   {                                                              \
     using tag_info = TagInfo<(uint16_t)TagId::_name, _ifd_bits>; \
-    static_assert(tag_info::defined);                            \
     assert(&(_struct) != nullptr);                               \
     auto tag_result = parse_tag<tag_info>(                       \
-      r, _struct._name, _entry, _ifd_bits                        \
+      r, _struct._name, _entry                                   \
     );                                                           \
     if (!tag_result)                                             \
       return tag_result.error();                                 \
@@ -230,7 +164,6 @@ std::optional<ParseError> parse_subsectime_to_millis(Reader &r, const ifd_entry 
 #define PARSE_TAG_CUSTOM(_name, _ifd_bits, _parse_lambda)                  \
   {                                                                        \
     using tag_info = TagInfo<(uint16_t)TagId::_name, _ifd_bits>;           \
-    static_assert(tag_info::defined);                                      \
     if (tag_info::TagId == entry.tag) {                                    \
       if (auto err = [&]() -> std::optional<ParseError> _parse_lambda()) { \
         return err;                                                        \
@@ -239,13 +172,14 @@ std::optional<ParseError> parse_subsectime_to_millis(Reader &r, const ifd_entry 
     }                                                                      \
   }
 
-ParseResult<bool> find_subifd(Reader &r, ifd_entry &entry, const char *tag_str)
+ParseResult<bool> find_subifd(Reader &r, const ifd_entry &entry, const char *tag_str)
 {
   if (entry.tag == uint16_t(TagId::exif_offset)) {
     ASSERT_OR_PARSE_ERROR(entry.type == DType::LONG, CORRUPT_DATA, "IFD EXIF type wrong", tag_str);
     ASSERT_OR_PARSE_ERROR(entry.count == 1, CORRUPT_DATA, "Only one IDF EXIF offset expected", tag_str);
-    DEBUG_PRINT("Found EXIF SubIFD offset: %d", entry.value);
-    r.subifd_refs.push_back({entry.value, Reader::SubIFDRef::EXIF});
+    uint32_t offset = entry.offset(r);
+    DEBUG_PRINT("Found EXIF SubIFD offset: %d", offset);
+    r.subifd_refs.push_back({offset, 0, Reader::SubIFDRef::EXIF});
     return true;
   }
   if (entry.tag == uint16_t(TagId::sub_ifd_offset)) {
@@ -253,14 +187,15 @@ ParseResult<bool> find_subifd(Reader &r, ifd_entry &entry, const char *tag_str)
     for (int i = 0; i < entry.count; ++i) {
       uint32_t offset = fetch_entry_value<uint32_t>(entry, i, r);
       DEBUG_PRINT("Found SubIFD: %d", offset);
-      r.subifd_refs.push_back({offset, Reader::SubIFDRef::OTHER});
+      r.subifd_refs.push_back({offset, 0, Reader::SubIFDRef::OTHER});
     }
     return true;
   }
   if (entry.tag == uint16_t(TagId::makernote) || entry.tag == uint16_t(TagId::makernote_alt)) {
     ASSERT_OR_PARSE_ERROR(entry.type == DType::UNDEFINED, CORRUPT_DATA, "MakerNote datatype wrong", tag_str);
-    DEBUG_PRINT("Found MakerNote SubIFD: offset=%d size=%d", entry.value, entry.count);
-    r.subifd_refs.push_back({entry.value, Reader::SubIFDRef::MAKERNOTE});
+    uint32_t offset = entry.offset(r);
+    DEBUG_PRINT("Found MakerNote: offset=%d size=%d", offset, entry.count);
+    r.subifd_refs.push_back({offset, entry.count, Reader::SubIFDRef::MAKERNOTE});
     return true;
   }
   return false;
@@ -275,26 +210,6 @@ ParseResult<bool> find_subifd(Reader &r, ifd_entry &entry, const char *tag_str)
     }                                                      \
   }
 
-std::optional<ParseError> parse_makernote_ifd(Reader &r, ImageData *current_image, ExifData &data, uint32_t *next_offset, uint32_t ifd_type)
-{
-  RETURN_IF_OPT_ERROR(r.seek(*next_offset));
-
-  uint16_t num_entries = r.read_u16();
-  DEBUG_PRINT("Num IFD entries: %d", num_entries);
-  assert(num_entries < 1000);
-  Indenter indenter;
-  for (int i = 0; i < num_entries; ++i) {
-    // Read IFD entry.
-    ifd_entry entry = read_ifd_entry(r);
-    Indenter indenter;
-  }
-  uint32_t next_ifd_offset = r.read_u32();
-  DEBUG_PRINT("Next IFD offset: %d\n", next_ifd_offset);
-  *next_offset = next_ifd_offset;
-
-  return std::nullopt;
-}
-
 std::optional<ParseError> parse_exif_ifd(Reader &r, ExifData &data, uint32_t exif_offset, uint32_t *next_offset)
 {
   RETURN_IF_OPT_ERROR(r.seek(exif_offset));
@@ -306,33 +221,35 @@ std::optional<ParseError> parse_exif_ifd(Reader &r, ExifData &data, uint32_t exi
   for (int i = 0; i < num_entries; ++i) {
     // Read IFD entry.
     ifd_entry entry = read_ifd_entry(r);
-    const char *tag_str = to_str(entry.tag, IFD_BitMasks::IFD_EXIF);
+    const char *tag_str = to_str(entry.tag, IFD_EXIF);
+    debug_print_ifd_entry(r, entry, tag_str);
     Indenter indenter;
 
     FIND_SUBIFDS();
 
     // clang-format off
-#define PARSE_EXIF_TAG(_name) PARSE_TAG(data.exif, _name, entry, IFD_BitMasks::IFD_EXIF)
+#define PARSE_EXIF_TAG(_name) PARSE_TAG(data.exif, _name, entry, IFD_EXIF)
     PARSE_EXIF_TAG(exposure_time);
     PARSE_EXIF_TAG(f_number);
     PARSE_EXIF_TAG(iso);
     PARSE_EXIF_TAG(exposure_program);
-    PARSE_TAG(data.exif, focal_length, entry, IFD_BitMasks::IFD_ALL); // Can appear in both?
+    PARSE_TAG(data.exif, focal_length, entry, IFD_ALL); // Can appear in both?
     PARSE_EXIF_TAG(exif_version);
     PARSE_EXIF_TAG(date_time_original);
     PARSE_EXIF_TAG(date_time_digitized);
-    PARSE_TAG_CUSTOM(subsectime, IFD_BitMasks::IFD_EXIF, {
+    PARSE_TAG_CUSTOM(subsectime, IFD_EXIF, {
       return parse_subsectime_to_millis(r, entry, &data.date_time.value.millis);
     });
-    PARSE_TAG_CUSTOM(subsectime_original, IFD_BitMasks::IFD_EXIF, {
+    PARSE_TAG_CUSTOM(subsectime_original, IFD_EXIF, {
       return parse_subsectime_to_millis(r, entry, &data.exif.date_time_original.value.millis);
     });
-    PARSE_TAG_CUSTOM(subsectime_digitized, IFD_BitMasks::IFD_EXIF, {
+    PARSE_TAG_CUSTOM(subsectime_digitized, IFD_EXIF, {
       return parse_subsectime_to_millis(r, entry, &data.exif.date_time_digitized.value.millis);
     });
 
     PARSE_EXIF_TAG(camera_owner_name         );
     PARSE_EXIF_TAG(body_serial_number        );
+    PARSE_EXIF_TAG(lens_specification        );
     PARSE_EXIF_TAG(lens_make                 );
     PARSE_EXIF_TAG(lens_model                );
     PARSE_EXIF_TAG(lens_serial_number        );
@@ -369,21 +286,17 @@ std::optional<ParseError> parse_tiff_ifd(Reader &r, ExifData &data, uint32_t ifd
   for (int i = 0; i < num_entries; ++i) {
     // Read IFD entry.
     ifd_entry entry = read_ifd_entry(r);
-    ASSERT_OR_PARSE_ERROR(
-      entry.type >= DType::BYTE && entry.type <= DType::DOUBLE,
-      CORRUPT_DATA, "Unknown IFD entry data type", nullptr
-    );
+    const char *tag_str = to_str(entry.tag, IFD_01);
+    debug_print_ifd_entry(r, entry, tag_str);
     Indenter indenter;
-
-    const char *tag_str = to_str(entry.tag, IFD_BitMasks::IFD_01);
 
     FIND_SUBIFDS();
 
     if (entry.tag == (uint16_t)TagId::subfile_type) {
       // Create new SubIFD!
     }
-#define PARSE_ROOT_TAG(_name) PARSE_TAG(data, _name, entry, IFD_BitMasks::IFD_01)
-    if (ifd_type & IFD_BitMasks::IFD_01) {
+#define PARSE_ROOT_TAG(_name) PARSE_TAG(data, _name, entry, IFD_01)
+    if (ifd_type & IFD_01) {
       PARSE_ROOT_TAG(copyright);
       PARSE_ROOT_TAG(artist);
       PARSE_ROOT_TAG(make);
@@ -407,14 +320,14 @@ std::optional<ParseError> parse_tiff_ifd(Reader &r, ExifData &data, uint32_t ifd
       PARSE_ROOT_TAG(analog_balance);
 
       // Can appear in both!
-      PARSE_TAG(data.exif, focal_length, entry, IFD_BitMasks::IFD_ALL);
+      PARSE_TAG(data.exif, focal_length, entry, IFD_ALL);
     }
 
 #undef PARSE_ROOT_TAG
 
     if (current_image != nullptr) {
-#define PARSE_IFD0_TAG(_name) PARSE_TAG((*current_image), _name, entry, IFD_BitMasks::IFD_01)
-      if (ifd_type & IFD_BitMasks::IFD_01) {
+#define PARSE_IFD0_TAG(_name) PARSE_TAG((*current_image), _name, entry, IFD_01)
+      if (ifd_type & IFD_01) {
         PARSE_IFD0_TAG(image_width);
         PARSE_IFD0_TAG(image_height);
         PARSE_IFD0_TAG(compression);
@@ -431,8 +344,8 @@ std::optional<ParseError> parse_tiff_ifd(Reader &r, ExifData &data, uint32_t ifd
     }
     // clang-format on
 
-    parse_tag<tiff::tag_subfile_type>(r, tag_subfile_type, entry, IFD_BitMasks::IFD_01);
-    parse_tag<tiff::tag_old_subfile_type>(r, tag_oldsubfile_type, entry, IFD_BitMasks::IFD_01);
+    parse_tag<tiff::tag_subfile_type>(r, tag_subfile_type, entry);
+    parse_tag<tiff::tag_old_subfile_type>(r, tag_oldsubfile_type, entry);
   }
 
   if (tag_subfile_type.is_set) {
@@ -454,19 +367,40 @@ std::optional<ParseError> parse_tiff_ifd(Reader &r, ExifData &data, uint32_t ifd
   return std::nullopt;
 }
 
+std::optional<ParseError> parse_makernote(Reader &r, ExifData &data, uint32_t offset, uint32_t length)
+{
+  using namespace std::string_view_literals;
+  std::string_view magic_nikon = "Nikon\0"sv;
+  if (std::memcmp(r.data + offset, magic_nikon.data(), magic_nikon.length()) == 0) {
+    Reader mnr(r.warnings);
+    mnr.data = r.data + offset + 10;
+    mnr.file_length = length - 10;
+    return makernote::nikon::parse_makernote(mnr, data);
+  }
+
+  return PARSE_ERROR(UNKNOWN_FILE_TYPE, "MakerNote of unknown type", nullptr);
+}
+
 std::optional<ParseError> read_tiff(Reader &r, ExifData &data)
 {
+  if (r.data[0] == 'I' && r.data[1] == 'I') {
+    r.byte_order = std::endian::little;
+  } else if (r.data[0] == 'M' && r.data[1] == 'M') {
+    r.byte_order = std::endian::big;
+  } else {
+    return PARSE_ERROR(CORRUPT_DATA, "Not a TIFF file", "II or MM header not found");
+  }
   RETURN_IF_OPT_ERROR(r.seek(4));
-  uint32_t root_ifd_offset = r.read_u32();
+  const uint32_t root_ifd_offset = r.read_u32();
   DEBUG_PRINT("root IFD offset: %d", root_ifd_offset);
 
-  int ifd_offset = root_ifd_offset;
-  uint16_t ifd_type = IFD_BitMasks::IFD0;
+  uint32_t ifd_offset = root_ifd_offset;
+  uint16_t ifd_type = IFD0;
   for (int ifd_idx = 0; ifd_idx < 5; ++ifd_idx) {
-    ImageData *current_image = &data.images[data.num_images++];
-
     DEBUG_PRINT("move to IFD at offset: %d\n", ifd_offset);
     uint32_t next_ifd_offset;
+
+    ImageData *current_image = &data.images[data.num_images++];
     if (auto error = parse_tiff_ifd(r, data, ifd_offset, current_image, ifd_type, &next_ifd_offset)) {
       return error;
     }
@@ -474,7 +408,7 @@ std::optional<ParseError> read_tiff(Reader &r, ExifData &data)
     RELAXED_ASSERT_PARSE_ERROR_OR_WARNING(ifd_offset % 2 == 0, r, CORRUPT_DATA, "IFD must align to word boundary", "root IFD");
     if (next_ifd_offset < r.file_length && next_ifd_offset != 0) {
       ifd_offset = next_ifd_offset;
-      ifd_type = IFD_BitMasks::IFD1;  // We now go to thumbnails
+      ifd_type = IFD1;  // We now go to thumbnails
     } else {
       break;
     }
@@ -511,9 +445,19 @@ std::optional<ParseError> read_tiff(Reader &r, ExifData &data)
         } while (next_offset != 0);
         ref.parsed = true;
         break;
+      case Reader::SubIFDRef::MAKERNOTE: {
+        if (auto error = parse_makernote(r, data, next_offset, ref.length)) {
+          if (r.strict_mode) {
+            return error;
+          } else {
+            r.warnings.emplace_back(error->message, error->what);
+            break;
+          }
+        }
+        break;
+      }
       case Reader::SubIFDRef::GPS:
       case Reader::SubIFDRef::INTEROP:
-      case Reader::SubIFDRef::MAKERNOTE:
         // Unsupported!
         DEBUG_PRINT("Unsupported IFD type skipped: %d\n", ref.type);
         break;
@@ -537,7 +481,6 @@ struct IFD_Writer {
 template <typename TagInfo>
 size_t write_tiff_tag_scalar(IFD_Writer &w, typename TagInfo::cpp_type value)
 {
-  static_assert(TagInfo::defined);
   // Variable count is compatible with count 1
   static_assert(TagInfo::count_spec::cpp_count == 1 || TagInfo::count_spec::cpp_count == 0);
   ifd_entry e;
@@ -546,7 +489,7 @@ size_t write_tiff_tag_scalar(IFD_Writer &w, typename TagInfo::cpp_type value)
   e.count = 1;
   int required_size = size_of_dtype(e.type) * e.count;
   if (required_size <= sizeof(uint32_t)) {
-    std::memcpy(&e.value, &value, std::min(sizeof(required_size), sizeof(value)));
+    std::memcpy(&e.data, &value, std::min(sizeof(required_size), sizeof(value)));
   } else {
     // The data should be stored elsewhere, in the data section,
     // after the IFD. We don't know the offset to the data section yet
@@ -554,8 +497,8 @@ size_t write_tiff_tag_scalar(IFD_Writer &w, typename TagInfo::cpp_type value)
     // IFD. So instead, we leave a placeholder, and we will count
     // how many offsets need to be rewritten. Detecting which ones
     // is a matter of doing the "required_size" calculation above.
-    auto offset = w.data_writer.write(value);
-    e.value = (uint32_t)(offset);
+    uint32_t offset = w.data_writer.write(value);
+    std::memcpy(&e.data, &offset, 4);
     w.num_offsets_to_adjust++;
   }
   w.num_tags_written++;
@@ -565,7 +508,6 @@ size_t write_tiff_tag_scalar(IFD_Writer &w, typename TagInfo::cpp_type value)
 template <typename TagInfo>
 size_t write_tiff_tag_string(IFD_Writer &w, const char *str, uint32_t length)
 {
-  static_assert(TagInfo::defined);
   static_assert(TagInfo::tiff_type == DType::ASCII);
   // Variable count is compatible with count 1
   static_assert(TagInfo::count_spec::cpp_count == 1);
@@ -574,8 +516,10 @@ size_t write_tiff_tag_string(IFD_Writer &w, const char *str, uint32_t length)
   e.tag = TagInfo::TagId;
   e.count = length;
   if (length <= sizeof(uint32_t)) {
-    e.value = 0;
-    std::memcpy(&e.value, str, length);
+    std::memcpy(&e.data, str, length);
+    for (int i = length; i < 4; ++i) {
+      e.data[i] = 0;
+    }
   } else {
     // The data should be stored elsewhere, in the data section,
     // after the IFD. We don't know the offset to the data section yet
@@ -583,8 +527,8 @@ size_t write_tiff_tag_string(IFD_Writer &w, const char *str, uint32_t length)
     // IFD. So instead, we leave a placeholder, and we will count
     // how many offsets need to be rewritten. Detecting which ones
     // is a matter of doing the "required_size" calculation above.
-    auto offset = w.data_writer.write_string(str, length);
-    e.value = (uint32_t)(offset);
+    uint32_t offset = w.data_writer.write_string(str, length);
+    std::memcpy(&e.data, &offset, sizeof(uint32_t));
     w.num_offsets_to_adjust++;
   }
   w.num_tags_written++;
@@ -611,14 +555,18 @@ void write_tiff_tag(IFD_Writer &w, const Tag<typename TagInfo::cpp_type> &tag)
       }
       write_tiff_tag_string<TagInfo>(w, buffer, num + 1);
       // TODO write subsecond
+      return;
     } else {
       if constexpr (TagInfo::count_spec::cpp_count == 1) {
         if constexpr (std::is_trivial_v<cppt>) {
           write_tiff_tag_scalar<TagInfo>(w, tag.value);
+          return;
         }
       }
     }
   }
+
+  DEBUG_PRINT("Cannot write tag %04x with count %d", TagInfo::TagId, TagInfo::count_spec::cpp_count);
 }
 
 struct OutstandingOffset {
@@ -778,6 +726,7 @@ size_t write_tiff(Writer &w, const ExifData &data)
     // clang-format off
     write_tiff_tag<tag_camera_owner_name         >(exif_ifd, data.exif.camera_owner_name          );
     write_tiff_tag<tag_body_serial_number        >(exif_ifd, data.exif.body_serial_number         );
+    write_tiff_tag<tag_lens_specification        >(exif_ifd, data.exif.lens_specification         );
     write_tiff_tag<tag_lens_make                 >(exif_ifd, data.exif.lens_make                  );
     write_tiff_tag<tag_lens_model                >(exif_ifd, data.exif.lens_model                 );
     write_tiff_tag<tag_lens_serial_number        >(exif_ifd, data.exif.lens_serial_number         );

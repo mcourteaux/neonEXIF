@@ -24,7 +24,7 @@ std::ostream &operator<<(std::ostream &o, const nexif::rational64s &r)
 std::ostream &operator<<(std::ostream &o, const nexif::CharData &d)
 {
   if (d.ptr_offset) {
-    return o << d.data();
+    return o << "\"\033[32m" << d.data() << "\033[0m\"";
   }
   return o << "(None)";
 }
@@ -158,17 +158,18 @@ int main(int argc, char **argv)
       print_tag(exif.exif, date_time_digitized);
 
       print_tag(exif.exif, exif_version);
-      print_tag(exif.exif, camera_owner_name         );
-      print_tag(exif.exif, body_serial_number        );
-      print_tag(exif.exif, lens_make                 );
-      print_tag(exif.exif, lens_model                );
-      print_tag(exif.exif, lens_serial_number        );
-      print_tag(exif.exif, image_title               );
-      print_tag(exif.exif, photographer              );
-      print_tag(exif.exif, image_editor              );
-      print_tag(exif.exif, raw_developing_software   );
-      print_tag(exif.exif, image_editing_software    );
-      print_tag(exif.exif, metadata_editing_software );
+      print_tag(exif.exif, camera_owner_name);
+      print_tag(exif.exif, body_serial_number);
+      print_tag(exif.exif, lens_specification);
+      print_tag(exif.exif, lens_make);
+      print_tag(exif.exif, lens_model);
+      print_tag(exif.exif, lens_serial_number);
+      print_tag(exif.exif, image_title);
+      print_tag(exif.exif, photographer);
+      print_tag(exif.exif, image_editor);
+      print_tag(exif.exif, raw_developing_software);
+      print_tag(exif.exif, image_editing_software);
+      print_tag(exif.exif, metadata_editing_software);
 
       for (int image_idx = 0; image_idx < exif.num_images; ++image_idx) {
         std::printf("Image #%d:\n", image_idx);
