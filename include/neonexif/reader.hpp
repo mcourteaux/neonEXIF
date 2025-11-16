@@ -122,11 +122,6 @@ struct Reader {
     bool parsed{false};
   };
   vla<SubIFDRef, 16> subifd_refs;
-
-  const char *store_string_data(const char *ptr, int count)
-  {
-    return exif_data->store_string_data(ptr, count);
-  }
 };
 
 struct Writer {

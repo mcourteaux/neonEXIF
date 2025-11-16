@@ -171,19 +171,26 @@ inline const char *to_str(FileType ft, FileTypeVariant v)
  * refering to string data stored in a buffer closeby. */
 struct CharData {
   CharData() = default;
-  CharData(const CharData &o)
+
+  CharData(const CharData &o) = delete;
+  CharData &operator=(const CharData &o) = delete;
+
+  CharData &operator=(const std::string_view &sv)
   {
-    operator=(o);
-  }
-  CharData &operator=(const CharData &o)
-  {
-    set(o.data(), o.length);
+    assert(sv.length() <= 0xffff && "string too long");
+    set(sv.data(), sv.length());
     return *this;
   }
 
   CharData(const char *ptr, uint16_t len)
   {
     set(ptr, len);
+  }
+
+  CharData(const std::string_view &sv)
+  {
+    assert(sv.length() <= 0xffff && "string too long");
+    set(sv.data(), sv.length());
   }
 
   int16_t ptr_offset{0};
@@ -227,7 +234,8 @@ struct rational {
   operator float() const { return float(num) / denom; }
   operator double() const { return double(num) / denom; }
 
-  inline bool operator==(const rational<T> &other) const {
+  inline bool operator==(const rational<T> &other) const
+  {
     return num == other.num && denom == other.denom;
   }
 };
@@ -409,10 +417,33 @@ struct Tag {
 
   Tag &operator=(T v)
   {
+    if constexpr (std::is_same_v<CharData, T>) {
+      if (v.data() == nullptr || v.len == 0) {
+        value.set(nullptr, 0);
+        is_set = false;
+        return *this;
+      }
+    }
     value = v;
     is_set = true;
     return *this;
   }
+
+  template <typename O>
+  Tag &operator=(O v)
+  {
+    if constexpr (std::is_same_v<std::string_view, O>) {
+      if (v.data() == nullptr) {
+        value.set(nullptr, 0);
+        is_set = false;
+        return *this;
+      }
+    }
+    value = v;
+    is_set = true;
+    return *this;
+  }
+
 
   operator bool() const
   {
@@ -573,34 +604,25 @@ struct ExifData {
     return nullptr;
   }
 
-  const char *store_string_data(const char *ptr, int count)
+  std::string_view store_string_data(const char *ptr, int count = 0)
   {
+    if (count == 0) {
+      count = std::strlen(ptr);
+      if (count == 0) {
+        return {nullptr, 0};
+      }
+    }
     assert(string_data_ptr + count < sizeof(string_data) && "out of string storage");
     char *dst = &string_data[string_data_ptr];
     std::memcpy(dst, ptr, count);
     string_data[string_data_ptr + count] = 0;
     string_data_ptr += count + 1;
-    return dst;
+    return {dst, (size_t)count};
   }
 
-  const char *store_string_data(const std::string &str)
+  std::string_view store_string_data(const std::string &str)
   {
     return store_string_data(str.data(), str.length());
-  }
-
-  CharData store_chardata(const char *ptr, int count = 0)
-  {
-    if (count == 0) {
-      count = std::strlen(ptr);
-    }
-    const char *res = store_string_data(ptr, count);
-    assert(count <= 0xffff);
-    return CharData{res, uint16_t(count)};
-  }
-
-  CharData store_chardata(const std::string &str)
-  {
-    return store_chardata(str.data(), str.length());
   }
 };
 

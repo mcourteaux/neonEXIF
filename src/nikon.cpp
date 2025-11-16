@@ -132,7 +132,7 @@ std::optional<ParseError> parse_makernote(Reader &r, ExifData &data)
         suffix
       );
     }
-    data.exif.lens_model = data.store_chardata(name);
+    data.exif.lens_model = data.store_string_data(name);
   }
   return std::nullopt;
 }

@@ -246,10 +246,10 @@ inline ParseResult<bool> parse_tag(Reader &r, Tag<typename TagInfo::cpp_type> &t
           INTERNAL_ERROR, "Internal error: no enough string space.", tag_str
         );
         if (entry.count <= 4) {
-          tag.value.set(r.store_string_data((char *)&entry.data, entry.count), entry.count);
+          tag.value = r.exif_data->store_string_data((char *)&entry.data, entry.count);
           DEBUG_PRINT("store inline string data of length %d: %s", entry.count, tag.value.data());
         } else {
-          tag.value.set(r.store_string_data(r.data + entry.offset(r), entry.count), entry.count);
+          tag.value = r.exif_data->store_string_data(r.data + entry.offset(r), entry.count);
           DEBUG_PRINT("store external string data of length %d: %s", entry.count, tag.value.data());
         }
         tag.parsed_from = tag_idval;
