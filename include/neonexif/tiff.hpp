@@ -194,12 +194,12 @@ template <typename T>
 struct base_type<T, true> {
   using type = std::underlying_type_t<T>;
 };
-}
+}  // namespace
 
 template <typename T>
-T fetch_entry_value(const ifd_entry &entry, int idx, Reader &r)
+ParseResult<T> fetch_entry_value(const ifd_entry &entry, int idx, Reader &r)
 {
-  assert(idx < entry.count);
+  ASSERT_OR_PARSE_ERROR(idx < entry.count, CORRUPT_DATA, "entry index out of bounds", nullptr);
   int32_t elem_size = size_of_dtype(entry.type);
   assert(sizeof(T) >= elem_size);
   T t{0};
@@ -208,7 +208,12 @@ T fetch_entry_value(const ifd_entry &entry, int idx, Reader &r)
     std::memcpy(&t, ((char *)&entry.data) + idx * elem_size, elem_size);
   } else {
     // Data is elsewhere
-    std::memcpy(&t, r.data + entry.offset(r) + elem_size * idx, elem_size);
+    uint32_t offset = entry.offset(r) + elem_size * idx;
+    if (offset + elem_size <= r.file_length) {
+      std::memcpy(&t, r.data + offset, elem_size);
+    } else {
+      return PARSE_ERROR(CORRUPT_DATA, "data offset out of bounds", nullptr);
+    }
   }
   if (r.byte_order != std::endian::native) {
     if constexpr (std::is_same_v<T, rational64u> || std::is_same_v<T, rational64s>) {
@@ -220,7 +225,6 @@ T fetch_entry_value(const ifd_entry &entry, int idx, Reader &r)
   }
   return t;
 }
-
 
 template <typename TagInfo>
 inline ParseResult<bool> parse_tag(Reader &r, Tag<typename TagInfo::cpp_type> &tag, const ifd_entry &entry)
@@ -249,8 +253,9 @@ inline ParseResult<bool> parse_tag(Reader &r, Tag<typename TagInfo::cpp_type> &t
           tag.value = r.exif_data->store_string_data((char *)&entry.data, entry.count);
           DEBUG_PRINT("store inline string data of length %d: %s", entry.count, tag.value.data());
         } else {
-          tag.value = r.exif_data->store_string_data(r.data + entry.offset(r), entry.count);
-          DEBUG_PRINT("store external string data of length %d: %s", entry.count, tag.value.data());
+          DECL_OR_RETURN(std::string_view, sv, r.data_view(entry.offset(r), entry.count));
+          tag.value = r.exif_data->store_string_data(sv.data(), sv.size());
+          DEBUG_PRINT("store external string data of length %d: %.*s", sv.length(), sv.length(), sv.data());
         }
         tag.parsed_from = tag_idval;
         tag.is_set = true;
@@ -278,20 +283,16 @@ inline ParseResult<bool> parse_tag(Reader &r, Tag<typename TagInfo::cpp_type> &t
         RETURN_IF_OPT_ERROR(r.seek(mark));
         return true;
       } else if constexpr (std::is_same_v<BType, DateTime>) {
-        std::string_view str{r.data + entry.offset(r), entry.count};
-        ParseResult<DateTime> r = parse_date_time(str);
-        if (r) {
-          DateTime dt = r.value();
-          tag.value.year = dt.year, tag.value.month = dt.month, tag.value.day = dt.day;
-          tag.value.hour = dt.hour, tag.value.minute = dt.minute, tag.value.second = dt.second;
-          tag.is_set = true;
-          tag.parsed_from = tag_idval;
-        } else {
-          return r.error();
-        }
+        DECL_OR_RETURN(std::string_view, str, r.data_view(entry.offset(r), entry.count));
+        DECL_OR_RETURN(DateTime, dt, parse_date_time(str));
+        tag.value.year = dt.year, tag.value.month = dt.month, tag.value.day = dt.day;
+        tag.value.hour = dt.hour, tag.value.minute = dt.minute, tag.value.second = dt.second;
+        tag.is_set = true;
+        tag.parsed_from = tag_idval;
         return true;
       } else if (entry.size() <= 4) {
-        tag.value = (typename TagInfo::cpp_type)fetch_entry_value<BType>(entry, 0, r);
+        DECL_OR_RETURN(BType, value, fetch_entry_value<BType>(entry, 0, r));
+        tag.value = (typename TagInfo::cpp_type)value;
         tag.parsed_from = tag_idval;
         tag.is_set = true;
         return true;

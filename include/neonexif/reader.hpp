@@ -78,6 +78,11 @@ struct Reader {
     return std::nullopt;
   }
 
+  inline ParseResult<std::string_view> data_view(uint32_t offset, uint32_t size) {
+    ASSERT_OR_PARSE_ERROR(offset + size <= file_length, CORRUPT_DATA, "Data view out of bounds", nullptr);
+    return std::string_view{data + offset, size};
+  }
+
   template <typename T>
   inline T read()
   {

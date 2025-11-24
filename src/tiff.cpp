@@ -68,42 +68,49 @@ void debug_print_ifd_entry(Reader &r, const ifd_entry &e, const char *tag_name)
     if (e.count < 60) {
       if (e.type == DType::ASCII) {
         if (e.count <= 4) {
-          PRINT("\"%.*s\"", e.count, (const char*)e.data);
+          PRINT("\"%.*s\"", e.count, (const char *)e.data);
         } else {
-          PRINT("\"%.*s\"", e.count, &r.data[e.offset(r)]);
+          auto sv = r.data_view(e.offset(r), e.count);
+          if (sv) {
+            PRINT("\"%.*s\"", e.count, sv.value().data());
+          } else {
+            PRINT("[out of bounds]");
+          }
         }
       } else {
         for (int i = 0; i < e.count; ++i) {
-          if (e.type == DType::SHORT) {
-            PRINT("%u ", (unsigned)fetch_entry_value<uint16_t>(e, i, r));
-          } else if (e.type == DType::SSHORT) {
-            PRINT("%d ", (int)fetch_entry_value<int16_t>(e, i, r));
-          } else if (e.type == DType::BYTE) {
-            PRINT("0x%02x ", (int)fetch_entry_value<uint8_t>(e, i, r));
-          } else if (e.type == DType::SBYTE) {
-            PRINT("0x%02x ", (int)fetch_entry_value<int8_t>(e, i, r));
-          } else if (e.type == DType::LONG) {
-            PRINT("%u ", (int)fetch_entry_value<uint32_t>(e, i, r));
-          } else if (e.type == DType::SLONG) {
-            PRINT("%d ", (int)fetch_entry_value<int32_t>(e, i, r));
-          } else if (e.type == DType::FLOAT) {
-            PRINT("%f ", fetch_entry_value<float>(e, i, r));
-          } else if (e.type == DType::DOUBLE) {
-            PRINT("%f ", fetch_entry_value<double>(e, i, r));
-          } else if (e.type == DType::RATIONAL) {
-            auto fr = fetch_entry_value<rational64u>(e, i, r);
-            PRINT("%u/%u ", fr.num, fr.denom);
-          } else if (e.type == DType::SRATIONAL) {
-            auto fr = fetch_entry_value<rational64s>(e, i, r);
-            PRINT("%d/%d ", fr.num, fr.denom);
-          }
+#define PRINT_IF_TYPE(_etype, _ctype, _fmt, _args...)               \
+  if (e.type == _etype) {                                           \
+    ParseResult<_ctype> _r = fetch_entry_value<_ctype>(e, i, r);    \
+    if (_r) {                                                       \
+      _ctype v = _r.value();                                        \
+      PRINT(_fmt, ##_args);                                         \
+    } else {                                                        \
+      ParseError err = _r.error();                                  \
+      PRINT("[%s:%s:%s]", to_str(err.code), err.message, err.what); \
+    }                                                               \
+    continue;                                                       \
+  }
+          PRINT_IF_TYPE(DType::SHORT, uint16_t, "%u ", (unsigned)v);
+          PRINT_IF_TYPE(DType::SSHORT, int16_t, "%d ", (int)v)
+          PRINT_IF_TYPE(DType::BYTE, uint8_t, "0x%02x ", (int)v);
+          PRINT_IF_TYPE(DType::SBYTE, int8_t, "0x%02x ", (int)v)
+          PRINT_IF_TYPE(DType::LONG, uint32_t, "%u ", (unsigned)v);
+          PRINT_IF_TYPE(DType::SLONG, int32_t, "%d ", (int)v);
+          PRINT_IF_TYPE(DType::FLOAT, float, "%f ", v);
+          PRINT_IF_TYPE(DType::DOUBLE, double, "%f ", v);
+          PRINT_IF_TYPE(DType::RATIONAL, rational64u, "%u/%u ", v.num, v.denom);
+          PRINT_IF_TYPE(DType::SRATIONAL, rational64s, "%d/%d ", v.num, v.denom);
+
+          PRINT("[CORRUPT_DATA:Unknown DType");
         }
       }
     }
+#undef PRINT_IF_TYPE
 #undef PRINT
     debug_print_fn(buf);
   }
-}
+}  // namespace tiff
 
 void debug_print_ifd_entry(Reader &r, const ifd_entry &e, const char *(*tag_to_str)(uint16_t tag))
 {
@@ -185,7 +192,7 @@ ParseResult<bool> find_subifd(Reader &r, const ifd_entry &entry, const char *tag
   if (entry.tag == uint16_t(TagId::sub_ifd_offset)) {
     ASSERT_OR_PARSE_ERROR(entry.type == DType::LONG, CORRUPT_DATA, "SubIFD datatype wrong", tag_str);
     for (int i = 0; i < entry.count; ++i) {
-      uint32_t offset = fetch_entry_value<uint32_t>(entry, i, r);
+      DECL_OR_RETURN(uint32_t, offset, fetch_entry_value<uint32_t>(entry, i, r));
       DEBUG_PRINT("Found SubIFD: %d", offset);
       r.subifd_refs.push_back({offset, 0, Reader::SubIFDRef::OTHER});
     }

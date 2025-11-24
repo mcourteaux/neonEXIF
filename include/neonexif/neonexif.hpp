@@ -117,6 +117,25 @@ struct ParseResult {
   }
 };
 
+#define DECL_OR_RETURN(_type, _var, _call) \
+  _type _var;                              \
+  {                                        \
+    if (auto _r = _call) {                 \
+      _var = _r.value();                   \
+    } else {                               \
+      return _r.error();                   \
+    }                                      \
+  }
+
+#define ASSIGN_OR_RETURN(_var, _call) \
+  {                                   \
+    if (auto _r = _call) {            \
+      _var = _r.value();              \
+    } else {                          \
+      return _r.error();              \
+    }                                 \
+  }
+
 enum FileType {
   TIFF,
   CIFF,
@@ -443,7 +462,6 @@ struct Tag {
     is_set = true;
     return *this;
   }
-
 
   operator bool() const
   {
