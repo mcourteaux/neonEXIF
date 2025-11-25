@@ -34,7 +34,7 @@ std::ostream &operator<<(std::ostream &o, const nexif::DateTime &d)
   char buffer[64];
   std::snprintf(
     buffer, sizeof(buffer),
-    "%d-%02d-%02d %d:%02d:%02d,%03d",
+    "%d-%02d-%02d %d:%02d:%02d.%03d",
     d.year, d.month, d.day, d.hour, d.minute, d.second, d.millis
   );
   o << buffer;

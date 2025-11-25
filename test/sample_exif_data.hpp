@@ -14,8 +14,8 @@ static nexif::ExifData generate_sample_exif_data()
   data.copyright = data.store_string_data("© Zero Effort 2025");
   data.make = data.store_string_data("Nikon", 5);
   data.model = data.store_string_data("D750", 4);
-  data.date_time = nexif::DateTime(2025, 8, 26, 10, 00, 00);
-  data.exif.date_time_original = nexif::DateTime(2025, 7, 18, 12, 10, 22);
+  data.date_time = nexif::DateTime(2025, 8, 26, 10, 00, 00, 129);
+  data.exif.date_time_original = nexif::DateTime(2025, 7, 18, 12, 10, 22, 420);
   data.exif.exposure_time = nexif::rational64u{1, 400};
   data.exif.iso = 1600;
   data.exif.f_number = nexif::rational64u{28, 10};             // f/2.8

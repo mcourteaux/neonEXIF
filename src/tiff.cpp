@@ -563,7 +563,15 @@ void write_tiff_tag(IFD_Writer &w, const Tag<typename TagInfo::cpp_type> &tag)
         DEBUG_PRINT("Unexpected date time string length: %s (len = %d)", buffer, num);
       }
       write_tiff_tag_string<TagInfo>(w, buffer, num + 1);
-      // TODO write subsecond
+      char buf_millis[4];
+      std::snprintf(buf_millis, sizeof(buf_millis), "%03d", dt.millis);
+      if (std::is_same_v<TagInfo, tag_date_time_original>) {
+        write_tiff_tag_string<tag_subsectime_original>(w, buf_millis, 4);
+      } else if (std::is_same_v<TagInfo, tag_date_time>) {
+        write_tiff_tag_string<tag_subsectime>(w, buf_millis, 4);
+      } else if (std::is_same_v<TagInfo, tag_date_time_digitized>) {
+        write_tiff_tag_string<tag_subsectime_digitized>(w, buf_millis, 4);
+      }
       return;
     } else {
       if constexpr (TagInfo::count_spec::cpp_count == 1) {

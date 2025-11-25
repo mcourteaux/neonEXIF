@@ -137,8 +137,19 @@ int main(int argc, char **argv)
     print_mark_str(data.exif.lens_make, 20);
     print_mark_str(data.exif.lens_model, 30);
 
+    if (auto &dt = data.exif.date_time_original; dt.is_set) {
+      auto v = dt.value;
+      printf(
+          "%04d-%02d-%02d %02d:%02d:%02d.%03d",
+          v.year, v.month, v.day,
+          v.hour, v.minute, v.second, v.millis
+          );
+    } else {
+      printf("\033[2m(not set)              \033[0m");
+    }
+
     double us = std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count() * 1e-3;
-    printf(" %4.0fus", us);
+    printf(" %5.0fus", us);
     printf(" \033[2m%8s\033[0m", nexif::to_str(ft, ftv));
 
     printf("  %s\n", relpath.c_str());
