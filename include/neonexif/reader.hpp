@@ -131,7 +131,7 @@ struct Reader {
 
 struct Writer {
   std::vector<uint8_t> &dst;
-  size_t pos;
+  size_t pos{0};
   int32_t tiff_base_offset{0};
 
   Writer(std::vector<uint8_t> &dst) :
@@ -146,7 +146,7 @@ struct Writer {
   }
 
   template <typename T>
-  inline size_t write(T t)
+  inline size_t write(const T &t)
   {
     size_t old_pos = pos;
     dst.insert(dst.begin() + old_pos, sizeof(T), 0);
@@ -156,7 +156,7 @@ struct Writer {
   }
 
   template <typename T>
-  inline void overwrite(size_t pos, T t)
+  inline void overwrite(size_t pos, const T &t)
   {
     assert(pos + sizeof(T) <= dst.size());
     std::memcpy(&dst[pos], &t, sizeof(T));
@@ -174,7 +174,7 @@ struct Writer {
   inline size_t write_string(const char *str, uint32_t len)
   {
     size_t old_pos = pos;
-    DEBUG_PRINT("Storing string data %u: %s", len, str);
+    DEBUG_PRINT("Storing string at %zu data %u: %s", pos, len, str);
     dst.insert(dst.begin() + old_pos, str, str + len);
     pos += len;
     return old_pos;

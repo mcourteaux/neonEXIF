@@ -535,7 +535,7 @@ size_t write_tiff_tag_string(IFD_Writer &w, const char *str, uint32_t length)
     // how many offsets need to be rewritten. Detecting which ones
     // is a matter of doing the "required_size" calculation above.
     uint32_t offset = w.data_writer.write_string(str, length);
-    std::memcpy(&e.data, &offset, sizeof(uint32_t));
+    std::memcpy(&e.data[0], &offset, sizeof(uint32_t));
     w.num_offsets_to_adjust++;
   }
   w.num_tags_written++;
@@ -549,6 +549,7 @@ void write_tiff_tag(IFD_Writer &w, const Tag<typename TagInfo::cpp_type> &tag)
     using cppt = typename TagInfo::cpp_type;
     if constexpr (std::is_same_v<cppt, CharData>) {
       write_tiff_tag_string<TagInfo>(w, tag.value.data(), tag.value.length);
+      return;
     } else if constexpr (std::is_same_v<cppt, DateTime>) {
       char buffer[20];
       const DateTime &dt = tag.value;
@@ -571,9 +572,9 @@ void write_tiff_tag(IFD_Writer &w, const Tag<typename TagInfo::cpp_type> &tag)
         }
       }
     }
-  }
 
-  DEBUG_PRINT("Cannot write tag %04x with count %d", TagInfo::TagId, TagInfo::count_spec::cpp_count);
+    DEBUG_PRINT("Cannot write tag %04x with count %d", TagInfo::TagId, TagInfo::count_spec::cpp_count);
+  }
 }
 
 struct OutstandingOffset {
