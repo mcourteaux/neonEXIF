@@ -55,7 +55,7 @@ void debug_print_ifd_entry(Reader &r, const ifd_entry &e, const char *tag_name)
     constexpr size_t cap = 1024;
     char buf[cap];
     int len = 0;
-#define PRINT(args...) len += std::snprintf(buf + len, cap - len, ##args)
+#define PRINT(args...) if (cap > len) len += std::snprintf(buf + len, cap - len, ##args)
     PRINT(
       "IFD entry {0x%04x %-20s, %x:%-10s, %6d, %02x%02x%02x%02x} ",
       e.tag, tag_name, (int)e.type, to_str(e.type), e.count,
@@ -102,7 +102,8 @@ void debug_print_ifd_entry(Reader &r, const ifd_entry &e, const char *tag_name)
           PRINT_IF_TYPE(DType::RATIONAL, rational64u, "%u/%u ", v.num, v.denom);
           PRINT_IF_TYPE(DType::SRATIONAL, rational64s, "%d/%d ", v.num, v.denom);
 
-          PRINT("[CORRUPT_DATA:Unknown DType");
+          PRINT("[CORRUPT_DATA:Unknown DType]");
+          break;
         }
       }
     }

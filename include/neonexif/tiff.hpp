@@ -255,7 +255,7 @@ inline ParseResult<bool> parse_tag(Reader &r, Tag<typename TagInfo::cpp_type> &t
         } else {
           DECL_OR_RETURN(std::string_view, sv, r.data_view(entry.offset(r), entry.count));
           tag.value = r.exif_data->store_string_data(sv.data(), sv.size());
-          DEBUG_PRINT("store external string data of length %d: %.*s", sv.length(), sv.length(), sv.data());
+          DEBUG_PRINT("store external string data of length %zu: %.*s", sv.length(), (int)sv.length(), sv.data());
         }
         tag.parsed_from = tag_idval;
         tag.is_set = true;
