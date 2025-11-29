@@ -36,13 +36,13 @@ inline T byteswap(T t)
   if constexpr (std::is_same_v<T, float>) {
     uint32_t v;
     std::memcpy(&v, &t, 4);
-    v = byteswap(t);
+    v = byteswap(v);
     std::memcpy(&t, &v, 4);
     return t;
   } else if constexpr (std::is_same_v<T, double>) {
     uint64_t v;
     std::memcpy(&v, &t, 8);
-    v = byteswap(t);
+    v = byteswap(v);
     std::memcpy(&t, &v, 8);
     return t;
   } else {
