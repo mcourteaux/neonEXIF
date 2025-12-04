@@ -137,6 +137,16 @@ int main(int argc, char **argv)
     print_mark_str(data.exif.lens_make, 20);
     print_mark_str(data.exif.lens_model, 30);
 
+    std::printf("| ");
+
+    if (const nexif::ImageData *img = data.full_resolution_image()) {
+      printf("%4d x %4d", img->image_width.value_or(0), img->image_height.value_or(0));
+    } else {
+      printf("\033[31mno full-res\033[0m");
+    }
+    std::printf(" | ");
+
+
     if (auto &dt = data.exif.date_time_original; dt.is_set) {
       auto v = dt.value;
       printf(
