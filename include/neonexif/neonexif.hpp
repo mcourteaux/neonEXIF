@@ -590,7 +590,7 @@ struct ExifData {
   ExifIFD exif;
 
   char string_data[4096];
-  int string_data_ptr{0};
+  uint32_t string_data_ptr{0};
 
   ExifData() = default;
   ExifData &operator=(const ExifData &o)
@@ -622,7 +622,7 @@ struct ExifData {
     return nullptr;
   }
 
-  std::string_view store_string_data(const char *ptr, int count = 0)
+  std::string_view store_string_data(const char *ptr, uint32_t count = 0)
   {
     if (count == 0) {
       count = std::strlen(ptr);
