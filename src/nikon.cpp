@@ -117,20 +117,31 @@ std::optional<ParseError> parse_makernote(Reader &r, ExifData &data)
       std::snprintf(
         name, sizeof(name), "%s%dmm f/%g%s",
         prefix,
-        (int)(float)data.exif.lens_specification.value[0],
-        (float)data.exif.lens_specification.value[2],
+        (int)(float)ls.value[0],
+        (float)ls.value[2],
         suffix
       );
     } else {
-      std::snprintf(
-        name, sizeof(name), "%s%d-%dmm f/%g-%g%s",
-        prefix,
-        (int)(float)data.exif.lens_specification.value[0],
-        (int)(float)data.exif.lens_specification.value[1],
-        (float)data.exif.lens_specification.value[2],
-        (float)data.exif.lens_specification.value[3],
-        suffix
-      );
+      if (ls.value[2] == ls.value[3]) {
+        std::snprintf(
+          name, sizeof(name), "%s%d-%dmm f/%g%s",
+          prefix,
+          (int)(float)ls.value[0],
+          (int)(float)ls.value[1],
+          (float)ls.value[2],
+          suffix
+        );
+      } else {
+        std::snprintf(
+          name, sizeof(name), "%s%d-%dmm f/%g-%g%s",
+          prefix,
+          (int)(float)ls.value[0],
+          (int)(float)ls.value[1],
+          (float)ls.value[2],
+          (float)ls.value[3],
+          suffix
+        );
+      }
     }
     data.exif.lens_model = data.store_string_data(name);
   }
