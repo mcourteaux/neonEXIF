@@ -5,6 +5,7 @@
 
 #include <cstring>
 #include <cassert>
+#include <optional>
 #include <bit>
 
 namespace nexif {
