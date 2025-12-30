@@ -93,7 +93,7 @@ struct ParseWarning {
 };
 
 template <typename T>
-struct ParseResult {
+struct [[nodiscard]] ParseResult {
   std::variant<T, ParseError> _v;
   std::list<ParseWarning> warnings;
 

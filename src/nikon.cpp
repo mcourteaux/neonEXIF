@@ -75,12 +75,13 @@ std::optional<ParseError> parse_makernote(Reader &r, ExifData &data)
         DEBUG_PRINT("Nikon version: %d", version);
       }
 
-      if (auto result = tiff::parse_tag<nikon::tag_lens_specification>(r, data.exif.lens_specification, entry)) {
-      } else {
+      if (auto result = tiff::parse_tag<nikon::tag_lens_specification>(r, data.exif.lens_specification, entry); !result) {
         LOG_WARNING(r, result.error().message, result.error().what);
       }
 
-      tiff::parse_tag<nikon::tag_lens_type>(r, lens_type, entry);
+      if (auto result = tiff::parse_tag<nikon::tag_lens_type>(r, lens_type, entry); !result) {
+        LOG_WARNING(r, result.error().message, result.error().what);
+      }
     }
 
     ifd_offset = r.read_u32();

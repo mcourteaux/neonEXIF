@@ -55,7 +55,9 @@ void debug_print_ifd_entry(Reader &r, const ifd_entry &e, const char *tag_name)
     constexpr size_t cap = 1024;
     char buf[cap];
     int len = 0;
-#define PRINT(args...) if (cap > len) len += std::snprintf(buf + len, cap - len, ##args)
+#define PRINT(args...) \
+  if (cap > len)       \
+  len += std::snprintf(buf + len, cap - len, ##args)
     PRINT(
       "IFD entry {0x%04x %-20s, %x:%-10s, %6d, %02x%02x%02x%02x} ",
       e.tag, tag_name, (int)e.type, to_str(e.type), e.count,
@@ -169,15 +171,15 @@ std::optional<ParseError> parse_subsectime_to_millis(Reader &r, const ifd_entry 
       continue;                                                  \
   }
 
-#define PARSE_TAG_CUSTOM(_name, _ifd_bits, _parse_lambda)                  \
-  {                                                                        \
-    using tag_info = TagInfo<(uint16_t)TagId::_name, _ifd_bits>;           \
-    if (tag_info::TagId == entry.tag) {                                    \
-      if (auto err = [&]() -> std::optional<ParseError> _parse_lambda()) { \
-        return err;                                                        \
-      }                                                                    \
-      continue;                                                            \
-    }                                                                      \
+#define PARSE_TAG_CUSTOM(_name, _ifd_bits, _parse_lambda)                \
+  {                                                                      \
+    using tag_info = TagInfo<(uint16_t)TagId::_name, _ifd_bits>;         \
+    if (tag_info::TagId == entry.tag) {                                  \
+      if (auto err = [&]()->std::optional<ParseError> _parse_lambda()) { \
+        return err;                                                      \
+      }                                                                  \
+      continue;                                                          \
+    }                                                                    \
   }
 
 ParseResult<bool> find_subifd(Reader &r, const ifd_entry &entry, const char *tag_str)
@@ -352,8 +354,12 @@ std::optional<ParseError> parse_tiff_ifd(Reader &r, ExifData &data, uint32_t ifd
     }
     // clang-format on
 
-    parse_tag<tiff::tag_subfile_type>(r, tag_subfile_type, entry);
-    parse_tag<tiff::tag_old_subfile_type>(r, tag_oldsubfile_type, entry);
+    if (auto result = parse_tag<tiff::tag_subfile_type>(r, tag_subfile_type, entry); !result) {
+      LOG_WARNING(r, result.error().message, result.error().what);
+    }
+    if (auto result = parse_tag<tiff::tag_old_subfile_type>(r, tag_oldsubfile_type, entry); !result) {
+      LOG_WARNING(r, result.error().message, result.error().what);
+    }
   }
 
   if (tag_subfile_type.is_set) {
