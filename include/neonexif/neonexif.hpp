@@ -612,12 +612,24 @@ struct ExifData {
     operator=(std::move(o));
   }
 
-  const ImageData *full_resolution_image() const
+  const ImageData *full_resolution_image(bool relaxed) const
   {
     for (int i = 0; i < num_images; ++i) {
       if (images[i].type == FULL_RESOLUTION) {
         return &images[i];
       }
+    }
+    if (relaxed) {
+      uint64_t max_pixels = 0;
+      int max_idx = 0;
+      for (int i = 0; i < num_images; ++i) {
+        uint64_t pc = images[i].image_width * images[i].image_height;
+        if (pc > max_pixels) {
+          max_pixels = pc;
+          max_idx = i;
+        }
+      }
+      return &images[max_idx];
     }
     return nullptr;
   }
