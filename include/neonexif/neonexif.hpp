@@ -619,7 +619,7 @@ struct ExifData {
         return &images[i];
       }
     }
-    if (relaxed) {
+    if (relaxed && num_images > 0) {
       uint64_t max_pixels = 0;
       int max_idx = 0;
       for (int i = 0; i < num_images; ++i) {
