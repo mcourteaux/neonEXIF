@@ -201,12 +201,12 @@ struct CharData {
     return *this;
   }
 
-  CharData(const char *ptr, uint16_t len)
+  explicit CharData(const char *ptr, uint16_t len)
   {
     set(ptr, len);
   }
 
-  CharData(const std::string_view &sv)
+  explicit CharData(const std::string_view &sv)
   {
     assert(sv.length() <= 0xffff && "string too long");
     set(sv.data(), sv.length());
@@ -561,7 +561,7 @@ struct ExifIFD {
 struct ExifData {
   FileType file_type;
   FileTypeVariant file_type_variant;
-  ImageData images[5];
+  std::array<ImageData, 5> images;
   int num_images{0};
 
   Tag<CharData> copyright;

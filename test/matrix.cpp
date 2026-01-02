@@ -139,7 +139,7 @@ int main(int argc, char **argv)
 
     std::printf("| ");
 
-    if (const nexif::ImageData *img = data.full_resolution_image()) {
+    if (const nexif::ImageData *img = data.full_resolution_image(true)) {
       printf("%4d x %4d", img->image_width.value_or(0), img->image_height.value_or(0));
     } else {
       printf("\033[31mno full-res\033[0m");

@@ -410,9 +410,14 @@ std::optional<ParseError> read_tiff(Reader &r, ExifData &data)
 
   uint32_t ifd_offset = root_ifd_offset;
   uint16_t ifd_type = IFD0;
-  for (int ifd_idx = 0; ifd_idx < 5; ++ifd_idx) {
+  for (int ifd_idx = 0;; ++ifd_idx) {
     DEBUG_PRINT("move to IFD at offset: %d\n", ifd_offset);
     uint32_t next_ifd_offset;
+
+    if (data.num_images >= data.images.size()) {
+      r.warnings.emplace_back("Not reading subIFD", "There are too many SubImages");
+      break;
+    }
 
     ImageData *current_image = &data.images[data.num_images++];
     if (auto error = parse_tiff_ifd(r, data, ifd_offset, current_image, ifd_type, &next_ifd_offset)) {
@@ -447,6 +452,10 @@ std::optional<ParseError> read_tiff(Reader &r, ExifData &data)
         break;
       case Reader::SubIFDRef::OTHER:
         do {
+          if (data.num_images >= data.images.size()) {
+            r.warnings.emplace_back("Not reading subIFD", "There are too many SubImages");
+            break;
+          }
           ImageData *current_image = &data.images[data.num_images++];
           if (auto error = parse_tiff_ifd(r, data, next_offset, current_image, ifd_type, &next_offset)) {
             if (r.strict_mode) {

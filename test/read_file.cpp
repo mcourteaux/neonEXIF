@@ -24,7 +24,7 @@ std::ostream &operator<<(std::ostream &o, const nexif::rational64s &r)
 std::ostream &operator<<(std::ostream &o, const nexif::CharData &d)
 {
   if (d.ptr_offset) {
-    return o << "\"\033[32m" << d.data() << "\033[0m\"";
+    return o << "\"\033[32m" << d.data() << "\033[0m\"  (ptr_offset = " << d.ptr_offset << ", len=" << d.length << ")";
   }
   return o << "(None)";
 }
