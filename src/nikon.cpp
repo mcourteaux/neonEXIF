@@ -2,6 +2,8 @@
 #include "neonexif/tiff.hpp"
 #include "neonexif/tiff_tags.hpp"
 
+#include <charconv>
+
 // clang-format off
 
 constexpr static uint16_t IFD_MAKERNOTE_NIKON = 0x20;
