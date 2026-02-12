@@ -71,7 +71,8 @@ std::optional<ParseError> parse_makernote(Reader &r, ExifData &data)
       debug_print_ifd_entry(r, entry, tag_str);
 
       if (entry.tag == tag_version::TagId) {
-        version = std::atoi((const char *)entry.data);
+        auto result = std::from_chars((const char*)entry.data, (const char*)entry.data + entry.size(), version);
+        // TODO handle error?
         DEBUG_PRINT("Nikon version: %d", version);
       }
 
