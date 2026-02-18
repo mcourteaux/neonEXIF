@@ -87,7 +87,10 @@ struct Reader {
   template <typename T>
   inline T read()
   {
-    const T t = *(const T *)&data[ptr];
+    T t;
+    // memcpy to avoid UB with unaligned addresses.
+    // optimizes to a simple `mov` on x86 anyway.
+    std::memcpy(&t, &data[ptr], sizeof(T));
     ptr += sizeof(T);
     if (byte_order != std::endian::native) {
       return nexif::byteswap(t);
