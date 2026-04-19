@@ -144,6 +144,9 @@ int main(int argc, char **argv)
         }
       }
       std::printf("File type: %s\n", nexif::to_str(exif.file_type));
+
+      std::printf("Endianness: %s\n", exif.byte_order == std::endian::little ? "little" : "big");
+
       print_tag(exif, date_time);
       print_tag(exif, copyright);
       print_tag(exif, artist);

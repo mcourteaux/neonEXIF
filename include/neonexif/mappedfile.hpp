@@ -20,7 +20,8 @@
  *
  */
 
-#pragma once
+#ifndef MAPPEDFILE_H
+#define MAPPEDFILE_H
 
 #include <cstddef>
 #include <filesystem>
@@ -107,3 +108,4 @@ public:
 #endif /* __EXCEPTIONS */
 };
 
+#endif

@@ -386,6 +386,7 @@ std::optional<ParseError> read_tiff(Reader &r, ExifData &data)
   } else {
     return PARSE_ERROR(CORRUPT_DATA, "Not a TIFF file", "II or MM header not found");
   }
+  data.byte_order = r.byte_order;
   RETURN_IF_OPT_ERROR(r.seek(4));
   const uint32_t root_ifd_offset = r.read_u32();
   DEBUG_PRINT("root IFD offset: %d", root_ifd_offset);

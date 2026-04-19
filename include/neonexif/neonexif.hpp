@@ -586,6 +586,8 @@ struct NikonMakernote {
 struct ExifData {
   FileType file_type;
   FileTypeVariant file_type_variant;
+  std::endian byte_order;
+
   std::array<ImageData, 5> images;
   int num_images{0};
 
