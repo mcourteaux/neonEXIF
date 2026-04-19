@@ -19,15 +19,19 @@ x(0x00fe, IFD_01 , LONG     , uint32_t   , subfile_type               , count_sc
 x(0x00ff, IFD_01 , SHORT    , uint16_t   , old_subfile_type           , count_scalar         )    \
 x(0x0100, IFD_01 , LONG     , uint32_t   , image_width                , count_scalar         )    \
 x(0x0101, IFD_01 , LONG     , uint32_t   , image_height               , count_scalar         )    \
-x(0x0102, IFD_01 , LONG     , uint32_t   , bits_per_sample            , count_limvar<8>      )    \
+x(0x0102, IFD_01 , SHORT    , uint16_t   , bits_per_sample            , count_limvar<8>      )    \
 x(0x0103, IFD_01 , SHORT    , uint16_t   , compression                , count_scalar         )    \
 x(0x0106, IFD_01 , SHORT    , uint16_t   , photometric_interpretation , count_scalar         )    \
 x(0x010f, IFD_01 , ASCII    , CharData   , make                       , count_string         )    \
 x(0x0110, IFD_01 , ASCII    , CharData   , model                      , count_string         )    \
+x(0x0111, IFD_01 , LONG     , uint32_t   , strip_offsets              , count_limvar<32>     )    \
 x(0x0112, IFD_01 , SHORT    , Orientation, orientation                , count_scalar         )    \
 x(0x0115, IFD_01 , SHORT    , uint16_t   , samples_per_pixel          , count_scalar         )    \
+x(0x0116, IFD_01 , LONG     , uint32_t   , rows_per_strip             , count_scalar         )    \
+x(0x0117, IFD_01 , LONG     , uint32_t   , strip_byte_counts          , count_limvar<32>     )    \
 x(0x011a, IFD_01 , RATIONAL , rational64u, x_resolution               , count_scalar         )    \
 x(0x011b, IFD_01 , RATIONAL , rational64u, y_resolution               , count_scalar         )    \
+x(0x011c, IFD_01 , SHORT    , uint16_t   , planar_configuration       , count_scalar         )    \
 x(0x0128, IFD_01 , SHORT    , uint16_t   , resolution_unit            , count_scalar         )    \
 x(0x0131, IFD_01 , ASCII    , CharData   , software                   , count_string         )    \
 x(0x0132, IFD_01 , ASCII    , DateTime   , date_time                  , count_string         )    \

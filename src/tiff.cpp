@@ -158,30 +158,6 @@ std::optional<ParseError> parse_subsectime_to_millis(Reader &r, const ifd_entry 
   return std::nullopt;
 }
 
-#define PARSE_TAG(_struct, _name, _entry, _ifd_bits)             \
-  {                                                              \
-    using tag_info = TagInfo<(uint16_t)TagId::_name, _ifd_bits>; \
-    assert(&(_struct) != nullptr);                               \
-    auto tag_result = parse_tag<tag_info>(                       \
-      r, _struct._name, _entry                                   \
-    );                                                           \
-    if (!tag_result)                                             \
-      return tag_result.error();                                 \
-    else if (tag_result.value())                                 \
-      continue;                                                  \
-  }
-
-#define PARSE_TAG_CUSTOM(_name, _ifd_bits, _parse_lambda)                \
-  {                                                                      \
-    using tag_info = TagInfo<(uint16_t)TagId::_name, _ifd_bits>;         \
-    if (tag_info::TagId == entry.tag) {                                  \
-      if (auto err = [&]()->std::optional<ParseError> _parse_lambda()) { \
-        return err;                                                      \
-      }                                                                  \
-      continue;                                                          \
-    }                                                                    \
-  }
-
 ParseResult<bool> find_subifd(Reader &r, const ifd_entry &entry, const char *tag_str)
 {
   if (entry.tag == uint16_t(TagId::exif_offset)) {
@@ -238,22 +214,22 @@ std::optional<ParseError> parse_exif_ifd(Reader &r, ExifData &data, uint32_t exi
     FIND_SUBIFDS();
 
     // clang-format off
-#define PARSE_EXIF_TAG(_name) PARSE_TAG(data.exif, _name, entry, IFD_EXIF)
+#define PARSE_EXIF_TAG(_name) NEXIF_PARSE_TAG(data.exif, _name, entry, IFD_EXIF)
     PARSE_EXIF_TAG(exposure_time);
     PARSE_EXIF_TAG(f_number);
     PARSE_EXIF_TAG(iso);
     PARSE_EXIF_TAG(exposure_program);
-    PARSE_TAG(data.exif, focal_length, entry, IFD_ALL); // Can appear in both?
+    NEXIF_PARSE_TAG(data.exif, focal_length, entry, IFD_ALL); // Can appear in both?
     PARSE_EXIF_TAG(exif_version);
     PARSE_EXIF_TAG(date_time_original);
     PARSE_EXIF_TAG(date_time_digitized);
-    PARSE_TAG_CUSTOM(subsectime, IFD_EXIF, {
+    NEXIF_PARSE_TAG_CUSTOM(subsectime, IFD_EXIF, {
       return parse_subsectime_to_millis(r, entry, &data.date_time.value.millis);
     });
-    PARSE_TAG_CUSTOM(subsectime_original, IFD_EXIF, {
+    NEXIF_PARSE_TAG_CUSTOM(subsectime_original, IFD_EXIF, {
       return parse_subsectime_to_millis(r, entry, &data.exif.date_time_original.value.millis);
     });
-    PARSE_TAG_CUSTOM(subsectime_digitized, IFD_EXIF, {
+    NEXIF_PARSE_TAG_CUSTOM(subsectime_digitized, IFD_EXIF, {
       return parse_subsectime_to_millis(r, entry, &data.exif.date_time_digitized.value.millis);
     });
 
@@ -305,7 +281,7 @@ std::optional<ParseError> parse_tiff_ifd(Reader &r, ExifData &data, uint32_t ifd
     if (entry.tag == (uint16_t)TagId::subfile_type) {
       // Create new SubIFD!
     }
-#define PARSE_ROOT_TAG(_name) PARSE_TAG(data, _name, entry, IFD_01)
+#define PARSE_ROOT_TAG(_name) NEXIF_PARSE_TAG(data, _name, entry, IFD_01)
     if (ifd_type & IFD_01) {
       PARSE_ROOT_TAG(copyright);
       PARSE_ROOT_TAG(artist);
@@ -330,16 +306,17 @@ std::optional<ParseError> parse_tiff_ifd(Reader &r, ExifData &data, uint32_t ifd
       PARSE_ROOT_TAG(analog_balance);
 
       // Can appear in both!
-      PARSE_TAG(data.exif, focal_length, entry, IFD_ALL);
+      NEXIF_PARSE_TAG(data.exif, focal_length, entry, IFD_ALL);
     }
 
 #undef PARSE_ROOT_TAG
 
     if (current_image != nullptr) {
-#define PARSE_IFD0_TAG(_name) PARSE_TAG((*current_image), _name, entry, IFD_01)
+#define PARSE_IFD0_TAG(_name) NEXIF_PARSE_TAG((*current_image), _name, entry, IFD_01)
       if (ifd_type & IFD_01) {
         PARSE_IFD0_TAG(image_width);
         PARSE_IFD0_TAG(image_height);
+        PARSE_IFD0_TAG(bits_per_sample);
         PARSE_IFD0_TAG(compression);
         PARSE_IFD0_TAG(photometric_interpretation);
         PARSE_IFD0_TAG(orientation);
@@ -347,6 +324,10 @@ std::optional<ParseError> parse_tiff_ifd(Reader &r, ExifData &data, uint32_t ifd
         PARSE_IFD0_TAG(x_resolution);
         PARSE_IFD0_TAG(y_resolution);
         PARSE_IFD0_TAG(resolution_unit);
+        PARSE_IFD0_TAG(planar_configuration);
+        PARSE_IFD0_TAG(rows_per_strip);
+        PARSE_IFD0_TAG(strip_offsets);
+        PARSE_IFD0_TAG(strip_byte_counts);
         PARSE_IFD0_TAG(data_offset);
         PARSE_IFD0_TAG(data_length);
       }
@@ -389,6 +370,7 @@ std::optional<ParseError> parse_makernote(Reader &r, ExifData &data, uint32_t of
     Reader mnr(r.warnings);
     mnr.data = r.data + offset + 10;
     mnr.file_length = length - 10;
+    mnr.exif_data = &data;
     return makernote::nikon::parse_makernote(mnr, data);
   }
 

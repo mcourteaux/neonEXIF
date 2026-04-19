@@ -6,6 +6,7 @@
 #include <cstring>
 #include <cassert>
 #include <optional>
+#include <iostream>
 
 namespace nexif {
 namespace tiff {
@@ -74,9 +75,11 @@ inline int32_t size_of_dtype(DType dt)
 template <typename T>
 inline bool matches_dtype(DType dtype)
 {
-  if constexpr (std::is_same_v<T, uint8_t>) {
-    return dtype == DType::UNDEFINED || dtype == DType::BYTE;
+  if constexpr (std::is_same_v<T, char>) {
+    return dtype == DType::UNDEFINED || dtype == DType::BYTE || dtype == DType::SBYTE;
   } else if constexpr (std::is_same_v<T, uint8_t>) {
+    return dtype == DType::UNDEFINED || dtype == DType::BYTE;
+  } else if constexpr (std::is_same_v<T, int8_t>) {
     return dtype == DType::UNDEFINED || dtype == DType::SBYTE;
   } else if constexpr (std::is_same_v<T, CharData>) {
     return dtype == DType::ASCII || dtype == DType::UNDEFINED;
@@ -291,9 +294,25 @@ inline ParseResult<bool> parse_tag(Reader &r, Tag<typename TagInfo::cpp_type> &t
         tag.is_set = true;
         tag.parsed_from = tag_idval;
         return true;
-      } else if (entry.size() <= 4) {
-        DECL_OR_RETURN(BType, value, fetch_entry_value<BType>(entry, 0, r));
-        tag.value = (typename TagInfo::cpp_type)value;
+      } else {
+        if constexpr (TagInfo::count_spec::exif_count == 1) {
+          DECL_OR_RETURN(BType, value, fetch_entry_value<BType>(entry, 0, r));
+          tag.value = (typename TagInfo::cpp_type)value;
+        } else {
+          int count = entry.count;
+          if (count > TagInfo::count_spec::cpp_count) {
+            count = TagInfo::count_spec::cpp_count;
+            LOG_WARNING(r, "Truncated count", tag_str);
+          }
+          for (int i = 0; i < count; ++i) {
+            DECL_OR_RETURN(BType, val, fetch_entry_value<BType>(entry, i, r));
+            if constexpr (TagInfo::count_spec::exif_var) {
+              tag.value.push_back(val);
+            } else {
+              tag.value[i] = val;
+            }
+          }
+        }
         tag.parsed_from = tag_idval;
         tag.is_set = true;
         return true;
@@ -308,6 +327,30 @@ inline ParseResult<bool> parse_tag(Reader &r, Tag<typename TagInfo::cpp_type> &t
   }
   return false;
 }
+
+#define NEXIF_PARSE_TAG(_struct, _name, _entry, _ifd_bits)       \
+  {                                                              \
+    using tag_info = TagInfo<(uint16_t)TagId::_name, _ifd_bits>; \
+    assert(&(_struct) != nullptr);                               \
+    auto tag_result = parse_tag<tag_info>(                       \
+      r, _struct._name, _entry                                   \
+    );                                                           \
+    if (!tag_result)                                             \
+      return tag_result.error();                                 \
+    else if (tag_result.value())                                 \
+      continue;                                                  \
+  }
+
+#define NEXIF_PARSE_TAG_CUSTOM(_name, _ifd_bits, _parse_lambda)          \
+  {                                                                      \
+    using tag_info = TagInfo<(uint16_t)TagId::_name, _ifd_bits>;         \
+    if (tag_info::TagId == entry.tag) {                                  \
+      if (auto err = [&]()->std::optional<ParseError> _parse_lambda()) { \
+        return err;                                                      \
+      }                                                                  \
+      continue;                                                          \
+    }                                                                    \
+  }
 
 std::optional<ParseError> read_tiff(
   Reader &r,

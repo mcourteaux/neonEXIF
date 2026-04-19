@@ -519,6 +519,7 @@ struct ImageData {
   SubfileType type{NONE};
   Tag<uint32_t> image_width;
   Tag<uint32_t> image_height;
+  Tag<vla<uint16_t, 8>> bits_per_sample;
   Tag<uint16_t> compression;
   Tag<uint16_t> photometric_interpretation;
   Tag<Orientation> orientation;
@@ -529,6 +530,11 @@ struct ImageData {
 
   Tag<uint32_t> data_offset;
   Tag<uint32_t> data_length;
+
+  Tag<uint16_t> planar_configuration;
+  Tag<uint32_t> rows_per_strip;
+  Tag<vla<uint32_t, 32>> strip_offsets;
+  Tag<vla<uint32_t, 32>> strip_byte_counts;
 };
 
 struct ExifIFD {
@@ -556,6 +562,25 @@ struct ExifIFD {
   Tag<CharData> raw_developing_software;
   Tag<CharData> image_editing_software;
   Tag<CharData> metadata_editing_software;
+};
+
+struct NikonMakernote {
+  Tag<std::array<char, 4>> version;
+  Tag<std::array<uint16_t, 2>> iso;
+  Tag<CharData> color_mode;
+  Tag<CharData> quality;
+  Tag<CharData> white_balance;
+  Tag<CharData> sharpness;
+  Tag<CharData> focus_mode;
+  Tag<CharData> flash_setting;
+  Tag<CharData> flash_type;
+  Tag<uint8_t> lens_type;
+  Tag<std::array<rational64u, 4>> lens_specification;
+  Tag<uint16_t> nef_compression;
+  Tag<CharData> linearization_table;
+  Tag<CharData> color_balance; // possibly encrypted
+  Tag<uint32_t> shutter_count;
+  Tag<CharData> serial_number;
 };
 
 struct ExifData {
@@ -588,6 +613,12 @@ struct ExifData {
   Tag<rational64s> apex_shutter_speed_value;
 
   ExifIFD exif;
+
+  // clang-format off
+  std::variant<std::monostate
+    , NikonMakernote
+  > makernote;
+  // clang-format on
 
   char string_data[4096];
   uint32_t string_data_ptr{0};

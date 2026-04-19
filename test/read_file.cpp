@@ -4,6 +4,15 @@
 
 #include "neonexif/neonexif.hpp"
 
+std::ostream &operator<<(std::ostream &o, const uint8_t &r)
+{
+  return o << (unsigned)r << "_u8";
+}
+std::ostream &operator<<(std::ostream &o, const int8_t &r)
+{
+  return o << (int)r << "_i8";
+}
+
 std::ostream &operator<<(std::ostream &o, const nexif::rational64u &r)
 {
   o << r.num << "/" << r.denom;
@@ -24,7 +33,7 @@ std::ostream &operator<<(std::ostream &o, const nexif::rational64s &r)
 std::ostream &operator<<(std::ostream &o, const nexif::CharData &d)
 {
   if (d.ptr_offset) {
-    return o << "\"\033[32m" << d.data() << "\033[0m\"  (ptr_offset = " << d.ptr_offset << ", len=" << d.length << ")";
+    return o << "\"\033[32m" << d.data() << "\033[0m\"  \033[2m(ptr_offset=" << d.ptr_offset << ", len=" << d.length << ")\033[0m";
   }
   return o << "(None)";
 }
@@ -83,6 +92,7 @@ std::ostream &operator<<(std::ostream &o, const std::array<T, C> &array)
       data.tag.is_set ? 32 : 31, data.tag.parsed_from    \
     );                                                   \
     if (data.tag.is_set) {                               \
+      using t = std::decay_t<decltype(data.tag.value)>;  \
       std::cout << " = " << data.tag.value;              \
     } else {                                             \
       std::cout << " \033[2m(not set)\033[0m";           \
@@ -96,6 +106,7 @@ void print_image(const nexif::ImageData &id)
   print_tag(id, image_width);
   print_tag(id, image_height);
   print_tag(id, compression);
+  print_tag(id, bits_per_sample);
   print_tag(id, photometric_interpretation);
   print_tag(id, orientation);
   print_tag(id, samples_per_pixel);
@@ -104,6 +115,10 @@ void print_image(const nexif::ImageData &id)
   print_tag(id, resolution_unit);
   print_tag(id, data_offset);
   print_tag(id, data_length);
+  print_tag(id, strip_offsets);
+  print_tag(id, strip_byte_counts);
+  print_tag(id, rows_per_strip);
+  print_tag(id, planar_configuration);
 }
 
 int main(int argc, char **argv)
@@ -175,6 +190,28 @@ int main(int argc, char **argv)
         std::printf("Image #%d:\n", image_idx);
         print_image(exif.images[image_idx]);
       }
+
+      if (exif.makernote.index() != 0) {
+        std::printf("MakerNote:");
+        if (auto *nikon = std::get_if<nexif::NikonMakernote>(&exif.makernote)) {
+          std::printf(" (Nikon)\n");
+          print_tag((*nikon), version);
+          print_tag((*nikon), iso);
+          print_tag((*nikon), sharpness);
+          print_tag((*nikon), quality);
+          print_tag((*nikon), nef_compression);
+          print_tag((*nikon), color_mode);
+          print_tag((*nikon), flash_setting);
+          print_tag((*nikon), flash_type);
+          print_tag((*nikon), lens_type);
+          print_tag((*nikon), lens_specification);
+          print_tag((*nikon), shutter_count);
+          print_tag((*nikon), serial_number);
+        } else {
+          std::printf(" (Unknown)\n");
+        }
+      }
+
     } else {
       nexif::ParseError error = result.error();
       std::printf("Error code: %d\nMessage: %s\n", error.code, error.message);
