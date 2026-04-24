@@ -463,9 +463,16 @@ struct Tag {
     return *this;
   }
 
-  operator bool() const
+  explicit operator bool() const
+    requires(!std::is_same_v<T, bool>)
   {
     return is_set;
+  }
+
+  operator const T &() const
+    requires(!std::is_same_v<T, bool>)
+  {
+    return value;
   }
 
   const T &value_or(const T &fallback) const
@@ -476,6 +483,7 @@ struct Tag {
       return fallback;
     }
   }
+
 
   T &operator->() { return value; }
   const T operator->() const { return value; }
@@ -578,7 +586,7 @@ struct NikonMakernote {
   Tag<std::array<rational64u, 4>> lens_specification;
   Tag<uint16_t> nef_compression;
   Tag<CharData> linearization_table;
-  Tag<CharData> color_balance; // possibly encrypted
+  Tag<CharData> color_balance;  // possibly encrypted
   Tag<uint32_t> shutter_count;
   Tag<CharData> serial_number;
 };

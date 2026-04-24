@@ -68,13 +68,13 @@ struct Reader {
 
   [[nodiscard]] inline std::optional<ParseError> seek(int offset)
   {
-    ASSERT_OR_PARSE_ERROR(offset < file_length, CORRUPT_DATA, "Seek out of bounds", nullptr);
+    ASSERT_OR_PARSE_ERROR(offset < (int)file_length, CORRUPT_DATA, "Seek out of bounds", nullptr);
     ptr = offset;
     return std::nullopt;
   }
   [[nodiscard]] inline std::optional<ParseError> skip(int num)
   {
-    ASSERT_OR_PARSE_ERROR(ptr + num < file_length, CORRUPT_DATA, "Skip out of bounds", nullptr);
+    ASSERT_OR_PARSE_ERROR(ptr + num < (int)file_length, CORRUPT_DATA, "Skip out of bounds", nullptr);
     ptr += num;
     return std::nullopt;
   }
