@@ -252,11 +252,15 @@ inline ParseResult<bool> parse_tag(Reader &r, Tag<typename TagInfo::cpp_type> &t
           r.exif_data->string_data_ptr + entry.count < sizeof(r.exif_data->string_data),
           INTERNAL_ERROR, "Internal error: no enough string space.", tag_str
         );
+        int cnt = entry.count;
+        if (entry.type == DType::ASCII) {
+          cnt--;
+        }
         if (entry.count <= 4) {
-          tag.value = r.exif_data->store_string_data((char *)&entry.data, entry.count);
-          DEBUG_PRINT("store inline string data of length %d: %.*s", entry.count, entry.count, tag.value.data());
+          tag.value = r.exif_data->store_string_data((char *)&entry.data, cnt);
+          DEBUG_PRINT("store inline string data of length %d: %.*s", cnt, cnt, tag.value.data());
         } else {
-          DECL_OR_RETURN(std::string_view, sv, r.data_view(entry.offset(r), entry.count));
+          DECL_OR_RETURN(std::string_view, sv, r.data_view(entry.offset(r), cnt));
           tag.value = r.exif_data->store_string_data(sv.data(), sv.size());
           DEBUG_PRINT("store external string data of length %zu: %.*s", sv.length(), (int)sv.length(), sv.data());
         }
