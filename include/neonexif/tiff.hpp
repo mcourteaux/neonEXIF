@@ -253,8 +253,12 @@ inline ParseResult<bool> parse_tag(Reader &r, Tag<typename TagInfo::cpp_type> &t
           INTERNAL_ERROR, "Internal error: no enough string space.", tag_str
         );
         int cnt = entry.count;
-        if (entry.type == DType::ASCII) {
+        if (entry.type == DType::ASCII && entry.count > 0) {
           cnt--;
+        }
+        if (cnt == 0) {
+          tag.is_set = false;
+          return true;
         }
         if (entry.count <= 4) {
           tag.value = r.exif_data->store_string_data((char *)&entry.data, cnt);
