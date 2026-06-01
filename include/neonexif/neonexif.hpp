@@ -589,6 +589,13 @@ struct NikonMakernote {
   Tag<CharData> color_balance;  // possibly encrypted
   Tag<uint32_t> shutter_count;
   Tag<CharData> serial_number;
+  Tag<std::array<uint8_t, 8>> f_mount_lens_identifier;
+  Tag<uint16_t> z_mount_lens_identifier;
+
+  enum NikonMount {
+    F_Mount, Z_Mount, One_Mount
+  };
+  Tag<NikonMount> lens_mount;
 };
 
 struct ExifData {

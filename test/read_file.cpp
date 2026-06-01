@@ -60,6 +60,19 @@ std::ostream &operator<<(std::ostream &o, nexif::Illuminant illum)
   return o << to_str(illum);
 }
 
+std::ostream &operator<<(std::ostream &o, nexif::NikonMakernote::NikonMount mount)
+{
+  switch (mount) {
+    case nexif::NikonMakernote::F_Mount:
+      o << "F-mount"; break;
+    case nexif::NikonMakernote::Z_Mount:
+      o << "Z-mount"; break;
+    case nexif::NikonMakernote::One_Mount:
+      o << "1-mount"; break;
+  }
+  return o;
+}
+
 template <typename T, uint8_t C>
 std::ostream &operator<<(std::ostream &o, const nexif::vla<T, C> &array)
 {
@@ -210,6 +223,9 @@ int main(int argc, char **argv)
           print_tag((*nikon), lens_specification);
           print_tag((*nikon), shutter_count);
           print_tag((*nikon), serial_number);
+          print_tag((*nikon), lens_mount);
+          print_tag((*nikon), f_mount_lens_identifier);
+          print_tag((*nikon), z_mount_lens_identifier);
         } else {
           std::printf(" (Unknown)\n");
         }
