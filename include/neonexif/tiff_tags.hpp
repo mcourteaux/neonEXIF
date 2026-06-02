@@ -55,7 +55,6 @@ x(0xc628, IFD_01 , RATIONAL , rational64u, as_shot_neutral            , count_li
 x(0xc629, IFD_01 , RATIONAL , rational64u, as_shot_white_xy           , count_fixed<2>       )    \
 x(0xc65a, IFD_01 , SHORT    , Illuminant , calibration_illuminant_1   , count_scalar         )    \
 x(0xc65b, IFD_01 , SHORT    , Illuminant , calibration_illuminant_2   , count_scalar         )    \
-x(0x882a, IFD_01 , SSHORT   , Illuminant , timezone_offset            , count_scalar         )    \
 x(0x9201, IFD_01 , SRATIONAL, rational64s, apex_aperture_value        , count_scalar         )    \
 x(0x9202, IFD_01 , SRATIONAL, rational64s, apex_shutter_speed_value   , count_scalar         )
 
@@ -86,6 +85,7 @@ x(0xa438, IFD_EXIF, ASCII    , CharData   , image_editor              , count_st
 x(0xa43a, IFD_EXIF, ASCII    , CharData   , raw_developing_software   , count_string         )    \
 x(0xa43b, IFD_EXIF, ASCII    , CharData   , image_editing_software    , count_string         )    \
 x(0xa43c, IFD_EXIF, ASCII    , CharData   , metadata_editing_software , count_string         )    \
+x(0x882a, IFD_EXIF, SSHORT   , int16_t    , timezone_offset           , count_limvar<2>      )    \
   //
 
 // clang-format on

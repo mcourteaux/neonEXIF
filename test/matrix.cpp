@@ -54,12 +54,11 @@ int main(int argc, char **argv)
   print_col_header(col, 2, "img0 height");
   print_col_header(col, 2, "img0 samples/pixel");
   col += 2;
-  print_col_header(col, 2, "exif version");
+  print_col_header(col, 2, "date-time original");
   print_col_header(col, 2, "f-number");
   print_col_header(col, 2, "focal length");
-  print_col_header(col, 2, "lens specification");
   print_col_header(col, 2, "iso");
-  print_col_header(col, 2, "date-time original");
+  print_col_header(col, 2, "lens specification");
   col += 2;
   print_col_header(col, 2, "artist");
   print_col_header(col, 2, "copyright");
@@ -111,12 +110,11 @@ int main(int argc, char **argv)
     PRINT_MARK(images[0].image_height);
     PRINT_MARK(images[0].samples_per_pixel);
     std::printf("| ");
-    PRINT_MARK(exif.exif_version);
+    PRINT_MARK(exif.date_time_original);
     PRINT_MARK(exif.f_number);
     PRINT_MARK(exif.focal_length);
-    PRINT_MARK(exif.lens_specification);
     PRINT_MARK(exif.iso);
-    PRINT_MARK(exif.date_time_original);
+    PRINT_MARK(exif.lens_specification);
 
     std::printf("| ");
     PRINT_MARK(artist);
@@ -160,9 +158,10 @@ int main(int argc, char **argv)
     if (auto &dt = data.exif.date_time_original; dt.is_set) {
       auto v = dt.value;
       printf(
-        "%04d-%02d-%02d %02d:%02d:%02d.%03d",
+        "%04d-%02d-%02d %02d:%02d:%02d.%03d+%03d",
         v.year, v.month, v.day,
-        v.hour, v.minute, v.second, v.millis
+        v.hour, v.minute, v.second, v.millis,
+        v.timezone_offset
       );
     } else {
       printf("\033[2m(not set)              \033[0m");

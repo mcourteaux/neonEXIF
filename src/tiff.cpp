@@ -232,6 +232,11 @@ std::optional<ParseError> parse_exif_ifd(Reader &r, ExifData &data, uint32_t exi
     NEXIF_PARSE_TAG_CUSTOM(subsectime_digitized, IFD_EXIF, {
       return parse_subsectime_to_millis(r, entry, &data.exif.date_time_digitized.value.millis);
     });
+    NEXIF_PARSE_TAG_CUSTOM(timezone_offset, IFD_EXIF, {
+      DECL_OR_RETURN(int16_t, tz, fetch_entry_value<int16_t>(entry, 0, r));
+      data.exif.date_time_original.value.timezone_offset = tz;
+      return std::nullopt;
+    });
 
     PARSE_EXIF_TAG(camera_owner_name         );
     PARSE_EXIF_TAG(body_serial_number        );

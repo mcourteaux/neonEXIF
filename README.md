@@ -38,6 +38,12 @@ Legend: ✅ Supported; 🟧 Partially Supported; ❌ Unsupported; 🐢 Slow.
 
 MIT License.
 
+I chose the MIT license on purpose to make a viable alternative for all other
+GPL-licensed software. I doubted between LGPL and MIT, but went for MIT. I
+would however greatly appreciate if you make any additions or fixes to this
+library, you contribute them back in a form of a PR or some minimal information
+in an issue.
+
 ## 🤝 Contribute
 
 Contributions are welcome! Open a PR and we can work on merging your efforts!
@@ -47,3 +53,5 @@ Possible contributions:
  - PNG parsing.
  - WebP parsing.
  - CIFF parsing.
+
+Programming guidelines: no malloc/free during parsing.
