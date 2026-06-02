@@ -11,6 +11,9 @@ namespace nexif {
 namespace makernote::nikon {
 std::optional<ParseError> parse_makernote(Reader &r, ExifData &data);
 }
+namespace makernote::canon {
+std::optional<ParseError> parse_makernote(Reader &r, ExifData &data);
+}
 
 namespace tiff {
 
@@ -67,7 +70,7 @@ void debug_print_ifd_entry(Reader &r, const ifd_entry &e, const char *tag_name)
       // offset!
       PRINT("@0x%x -> ", e.offset(r));
     }
-    if (e.count < 60) {
+    if (e.count < 80) {
       if (e.type == DType::ASCII) {
         if (e.count <= 4) {
           PRINT("\"%.*s\"", e.count, (const char *)e.data);
@@ -108,6 +111,8 @@ void debug_print_ifd_entry(Reader &r, const ifd_entry &e, const char *tag_name)
           break;
         }
       }
+    } else {
+      PRINT(" (ommited)");
     }
 #undef PRINT_IF_TYPE
 #undef PRINT
@@ -122,13 +127,8 @@ void debug_print_ifd_entry(Reader &r, const ifd_entry &e, const char *(*tag_to_s
 
 const char *to_str(uint16_t tag, uint16_t ifd_bit)
 {
-#define TAG_TO_STR(_tag, _ifd_bitmask, _expected_tiff_type, _cpp_type, _name, _count) \
-  if (tag == _tag##u && (ifd_bit & _ifd_bitmask)) {                                   \
-    return #_name;                                                                    \
-  }
-  NEXIF_ALL_IFD0_TAGS(TAG_TO_STR);
-  NEXIF_ALL_EXIF_TAGS(TAG_TO_STR);
-#undef TAG_TO_STR
+  NEXIF_ALL_IFD0_TAGS(NEXIF_TAG_TO_STR);
+  NEXIF_ALL_EXIF_TAGS(NEXIF_TAG_TO_STR);
   return nullptr;
 }
 
@@ -372,6 +372,16 @@ std::optional<ParseError> parse_makernote(Reader &r, ExifData &data, uint32_t of
     mnr.file_length = length - 10;
     mnr.exif_data = &data;
     return makernote::nikon::parse_makernote(mnr, data);
+  }
+
+  if (data.make.value.view() == "Canon"sv) {
+    r.seek(offset);
+    return makernote::canon::parse_makernote(r, data);
+  }
+
+  for (int i = 0; i < std::min(16u, length); ++i) {
+    uint8_t byte = r.data[offset + i];
+    DEBUG_PRINT(" MakerNote byte %02d: %02x '%c'", i, byte, std::isprint(byte) ? byte : '?');
   }
 
   return PARSE_ERROR(UNKNOWN_FILE_TYPE, "MakerNote of unknown type", nullptr);

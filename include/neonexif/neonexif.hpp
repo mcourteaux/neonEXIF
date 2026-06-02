@@ -31,6 +31,37 @@ struct Indenter {
   }
 
 template <typename T>
+inline T byteswap_first_n(T t, int first_n)
+{
+  if constexpr (std::is_same_v<T, float>) {
+    uint32_t v;
+    std::memcpy(&v, &t, 4);
+    v = byteswap_first_n(v, first_n);
+    std::memcpy(&t, &v, 4);
+    return t;
+  } else if constexpr (std::is_same_v<T, double>) {
+    uint64_t v;
+    std::memcpy(&v, &t, 8);
+    v = byteswap_first_n(v, first_n);
+    std::memcpy(&t, &v, 8);
+    return t;
+  } else {
+    static_assert(sizeof(T) <= 8);
+    static_assert((sizeof(T) & (sizeof(T) - 1)) == 0);
+    if (first_n == 1)
+      return t;
+    if (first_n == 2)
+      return __builtin_bswap16(t);
+    if (first_n == 4)
+      return __builtin_bswap32(t);
+    if (first_n == 8)
+      return __builtin_bswap64(t);
+
+    return t;
+  }
+}
+
+template <typename T>
 inline T byteswap(T t)
 {
   if constexpr (std::is_same_v<T, float>) {
@@ -268,8 +299,8 @@ rational64s double_to_rational64s(double value, double accuracy = 1e-4);
 /** Variable length array */
 template <typename T, uint8_t Max>
 struct vla {
-  T values[Max];
-  uint8_t num{0};
+  std::array<T, Max> values;
+  uint32_t num{0};
 
   inline void push_back(const T &v)
   {
@@ -484,7 +515,6 @@ struct Tag {
     }
   }
 
-
   T &operator->() { return value; }
   const T operator->() const { return value; }
   T &operator*() { return value; }
@@ -563,6 +593,7 @@ struct ExifIFD {
   Tag<CharData> lens_make;
   Tag<CharData> lens_model;
   Tag<CharData> lens_serial_number;
+  Tag<vla<std::string_view, 8>> possible_lenses;
 
   Tag<CharData> image_title;
   Tag<CharData> photographer;
@@ -593,9 +624,21 @@ struct NikonMakernote {
   Tag<uint16_t> z_mount_lens_identifier;
 
   enum NikonMount {
-    F_Mount, Z_Mount, One_Mount
+    F_Mount,
+    Z_Mount,
+    One_Mount
   };
   Tag<NikonMount> lens_mount;
+};
+
+struct CanonMakernote {
+  Tag<uint16_t> lens_type;
+  Tag<uint16_t> min_focal_length;
+  Tag<uint16_t> max_focal_length;
+
+  Tag<uint32_t> serial_number;
+  Tag<CharData> internal_serial_number;
+  Tag<CharData> lens_serial_number;
 };
 
 struct ExifData {
@@ -634,6 +677,7 @@ struct ExifData {
   // clang-format off
   std::variant<std::monostate
     , NikonMakernote
+    , CanonMakernote
   > makernote;
   // clang-format on
 
@@ -699,6 +743,11 @@ struct ExifData {
   }
 
   std::string_view store_string_data(const std::string &str)
+  {
+    return store_string_data(str.data(), str.length());
+  }
+
+  std::string_view store_string_data(std::string_view str)
   {
     return store_string_data(str.data(), str.length());
   }

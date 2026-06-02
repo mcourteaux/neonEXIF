@@ -5,6 +5,7 @@
 #include <type_traits>
 
 #include "neonexif.hpp"
+#include "tag_helpers.hpp"
 #include "tiff.hpp"
 
 namespace nexif {
@@ -89,64 +90,17 @@ x(0xa43c, IFD_EXIF, ASCII    , CharData   , metadata_editing_software , count_st
 
 // clang-format on
 
-#define TAG_ENUM(tag, ifd_bitmask, expected_tiff_type, cpp_type, name, count) name = tag##u,
-
 enum class TagId : uint16_t {
   // clang-format off
-  NEXIF_ALL_IFD0_TAGS(TAG_ENUM)
-  NEXIF_ALL_EXIF_TAGS(TAG_ENUM)
+  NEXIF_ALL_IFD0_TAGS(NEXIF_TAG_ENUM_ENTRY)
+  NEXIF_ALL_EXIF_TAGS(NEXIF_TAG_ENUM_ENTRY)
   // clang-format on
 };
-inline bool operator==(uint16_t l, TagId r)
-{
-  return l == (uint16_t)r;
-}
-inline bool operator==(TagId l, uint16_t r)
-{
-  return (uint16_t)l == r;
-}
+NEXIF_MAKE_TAG_CMP;
 
 #undef TAG_ENUM
 
-template <uint16_t _TagId, uint16_t _IFD_BitMask>
-struct TagInfo;
-
-namespace {
-template <typename T, int CppCount, bool Var>
-struct cpp_count_helper {};
-template <typename T>
-struct cpp_count_helper<T, 1, false> {
-  using type = T;
-};
-template <typename T>
-struct cpp_count_helper<T, 0, true> {
-  using type = std::vector<T>;
-};
-template <typename T, int C>
-struct cpp_count_helper<T, C, true> {
-  using type = vla<T, C>;
-};
-template <typename T, int C>
-struct cpp_count_helper<T, C, false> {
-  using type = std::array<T, C>;
-};
-}  // namespace
-
-#define NEXIF_TEMPLATE_TAG_INFO(_tag, _ifd_bitmask, _expected_tiff_type, _cpp_type, _name, _count_spec) \
-  template <>                                                                                           \
-  struct TagInfo<_tag##u, _ifd_bitmask> {                                                               \
-    constexpr static uint16_t TagId = _tag##u;                                                          \
-    constexpr static uint16_t IFD_BitMask = _ifd_bitmask;                                               \
-    constexpr static nexif::tiff::DType tiff_type = nexif::tiff::DType::_expected_tiff_type;            \
-    using scalar_cpp_type = _cpp_type;                                                                  \
-    using cpp_type = nexif::tiff::cpp_count_helper<                                                     \
-      scalar_cpp_type,                                                                                  \
-      nexif::tiff::_count_spec::cpp_count,                                                              \
-      nexif::tiff::_count_spec::cpp_var>::type;                                                         \
-    using count_spec = nexif::tiff::_count_spec;                                                        \
-    constexpr static const char *name = #_name;                                                         \
-  };                                                                                                    \
-  using tag_##_name = TagInfo<_tag##u, _ifd_bitmask>;
+NEXIF_DECLARE_TAG_INFO;
 
 NEXIF_ALL_IFD0_TAGS(NEXIF_TEMPLATE_TAG_INFO);
 NEXIF_ALL_EXIF_TAGS(NEXIF_TEMPLATE_TAG_INFO);

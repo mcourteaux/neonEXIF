@@ -46,6 +46,7 @@ int main(int argc, char **argv)
     std::printf("Usage: %s <dir>\n", argv[0]);
     return 1;
   }
+
   std::printf("Walking %s ...\n\n", argv[1]);
 
   int col = 0;
@@ -134,8 +135,18 @@ int main(int argc, char **argv)
 
     print_mark_str(data.make, 15);
     print_mark_str(data.model, 25);
-    print_mark_str(data.exif.lens_make, 20);
-    print_mark_str(data.exif.lens_model, 30);
+    print_mark_str(data.exif.body_serial_number, 14);
+    if (data.exif.possible_lenses.value.num) {
+      auto name = data.exif.possible_lenses.value.values[0];
+      std::printf(" \033[32m%-*.*s\033[0m", 42, int(name.size()), name.data());
+    } else if (data.exif.lens_model) {
+      //print_mark_str(data.exif.lens_make, 15);
+      print_mark_str(data.exif.lens_model, 42);
+    } else {
+      std::string_view n = "(null)";
+      std::printf(" \033[31m%-*.*s\033[0m", 42, int(n.size()), n.data());
+    }
+    print_mark_str(data.exif.lens_serial_number, 14);
 
     std::printf("| ");
 
@@ -146,21 +157,20 @@ int main(int argc, char **argv)
     }
     std::printf(" | ");
 
-
     if (auto &dt = data.exif.date_time_original; dt.is_set) {
       auto v = dt.value;
       printf(
-          "%04d-%02d-%02d %02d:%02d:%02d.%03d",
-          v.year, v.month, v.day,
-          v.hour, v.minute, v.second, v.millis
-          );
+        "%04d-%02d-%02d %02d:%02d:%02d.%03d",
+        v.year, v.month, v.day,
+        v.hour, v.minute, v.second, v.millis
+      );
     } else {
       printf("\033[2m(not set)              \033[0m");
     }
 
     double us = std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count() * 1e-3;
-    printf(" %5.0fus", us);
-    printf(" \033[2m%8s\033[0m", nexif::to_str(ft, ftv));
+    printf(" \033[34m%5.0fus\033[0m", us);
+    printf(" \033[2m\033[33m%8s\033[0m", nexif::to_str(ft, ftv));
 
     printf("  %s\n", relpath.c_str());
   }

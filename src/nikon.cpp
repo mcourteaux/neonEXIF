@@ -1,6 +1,6 @@
 #include "neonexif/neonexif.hpp"
 #include "neonexif/tiff.hpp"
-#include "neonexif/tiff_tags.hpp"
+#include "neonexif/tag_helpers.hpp"
 
 #include "nikon_lens_id.cpp"
 
@@ -37,39 +37,11 @@ namespace nikon {
 
 extern const uint8_t xlat[2][256];
 
-template <uint16_t _TagId, uint16_t _IFD_BitMask>
-struct TagInfo;
-
-const char *to_str(uint16_t tag, uint16_t ifd_bit)
-{
-#define TAG_TO_STR(_tag, _ifd_bitmask, _expected_tiff_type, _cpp_type, _name, _count) \
-  if (tag == _tag##u && (ifd_bit & _ifd_bitmask)) {                                   \
-    return #_name;                                                                    \
-  }
-  NEXIF_ALL_MAKERNOTE_NIKON_TAGS(TAG_TO_STR);
-#undef TAG_TO_STR
-  return nullptr;
-}
-
+NEXIF_DECLARE_TAG_INFO;
+NEXIF_MAKE_TO_STRING(NEXIF_ALL_MAKERNOTE_NIKON_TAGS);
 NEXIF_ALL_MAKERNOTE_NIKON_TAGS(NEXIF_TEMPLATE_TAG_INFO);
-
-#define TAG_ENUM(tag, ifd_bitmask, expected_tiff_type, cpp_type, name, count) name = tag##u,
-
-enum class TagId : uint16_t {
-  // clang-format off
-  NEXIF_ALL_MAKERNOTE_NIKON_TAGS(TAG_ENUM)
-  // clang-format on
-};
-inline bool operator==(uint16_t l, TagId r)
-{
-  return l == (uint16_t)r;
-}
-inline bool operator==(TagId l, uint16_t r)
-{
-  return (uint16_t)l == r;
-}
-
-#undef TAG_ENUM
+NEXIF_MAKE_TAG_ENUM(NEXIF_ALL_MAKERNOTE_NIKON_TAGS);
+NEXIF_MAKE_TAG_CMP;
 
 std::optional<ParseError> parse_makernote(Reader &r, ExifData &data)
 {
@@ -106,11 +78,11 @@ std::optional<ParseError> parse_makernote(Reader &r, ExifData &data)
 #define PARSE_NIKON_TAG(_name) NEXIF_PARSE_TAG(mn, _name, entry, IFD_MAKERNOTE_NIKON)
 
       PARSE_NIKON_TAG(version);
-      //if (entry.tag == tag_version::TagId) {
-      //  auto result = std::from_chars((const char*)entry.data, (const char*)entry.data + entry.size(), version);
-      //  // TODO handle error?
-      //  DEBUG_PRINT("Nikon version: %d", version);
-      //}
+      // if (entry.tag == tag_version::TagId) {
+      //   auto result = std::from_chars((const char*)entry.data, (const char*)entry.data + entry.size(), version);
+      //   // TODO handle error?
+      //   DEBUG_PRINT("Nikon version: %d", version);
+      // }
 
       PARSE_NIKON_TAG(iso);
       PARSE_NIKON_TAG(color_mode);
@@ -240,6 +212,8 @@ std::optional<ParseError> parse_makernote(Reader &r, ExifData &data)
 
       if (mount == NikonMakernote::F_Mount) {
         if (id_offset) {
+          std::array<std::string_view, 8> cand_lenses;
+          uint32_t num_cand = 0;
           mn.f_mount_lens_identifier = std::array<uint8_t, 8>{
             lensdata_buffer[id_offset + 0],
             lensdata_buffer[id_offset + 1],
@@ -254,9 +228,16 @@ std::optional<ParseError> parse_makernote(Reader &r, ExifData &data)
           // Lookup lens id
           for (NikonFMountLensID &lens : nikon_dslr_fmount_lenses) {
             if (mn.f_mount_lens_identifier.value == lens.id) {
-              data.exif.lens_model = data.store_string_data(lens.name.data(), lens.name.size());
-              break;
+              if (num_cand < 8) {
+                cand_lenses[num_cand++] = lens.name;
+              }
             }
+          }
+          if (num_cand == 1) {
+            data.exif.lens_model = data.store_string_data(cand_lenses[0]);
+          } else {
+            data.exif.possible_lenses = {cand_lenses, num_cand};
+            data.exif.possible_lenses.parsed_from = tag_lens_data::TagId;
           }
           if (!data.exif.lens_model.is_set) {
             r.warnings.push_back({
@@ -272,7 +253,7 @@ std::optional<ParseError> parse_makernote(Reader &r, ExifData &data)
         // Lookup lens id
         for (NikonZMountLensID &lens : nikon_mirrorless_zmount_lenses) {
           if (mn.z_mount_lens_identifier.value == lens.id) {
-            data.exif.lens_model = data.store_string_data(lens.name.data(), lens.name.size());
+            data.exif.lens_model = data.store_string_data(lens.name);
             break;
           }
         }
@@ -348,6 +329,13 @@ std::optional<ParseError> parse_makernote(Reader &r, ExifData &data)
     }
     data.exif.lens_model = data.store_string_data(name);
   }
+
+  // Serial number canoncalize
+  if (mn.serial_number.is_set) {
+    data.exif.body_serial_number = mn.serial_number.value.view();
+    data.exif.body_serial_number.parsed_from = mn.serial_number.parsed_from;
+  }
+
   return std::nullopt;
 }
 

@@ -195,6 +195,7 @@ int main(int argc, char **argv)
       print_tag(exif.exif, lens_make);
       print_tag(exif.exif, lens_model);
       print_tag(exif.exif, lens_serial_number);
+      print_tag(exif.exif, possible_lenses);
       print_tag(exif.exif, image_title);
       print_tag(exif.exif, photographer);
       print_tag(exif.exif, image_editor);
@@ -226,6 +227,14 @@ int main(int argc, char **argv)
           print_tag((*nikon), lens_mount);
           print_tag((*nikon), f_mount_lens_identifier);
           print_tag((*nikon), z_mount_lens_identifier);
+        } else if (auto *canon = std::get_if<nexif::CanonMakernote>(&exif.makernote)) {
+          std::printf(" (Canon)\n");
+          print_tag((*canon), lens_serial_number);
+          print_tag((*canon), lens_type);
+          print_tag((*canon), min_focal_length);
+          print_tag((*canon), max_focal_length);
+          print_tag((*canon), serial_number);
+          print_tag((*canon), internal_serial_number);
         } else {
           std::printf(" (Unknown)\n");
         }

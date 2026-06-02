@@ -6,7 +6,6 @@
 #include <cstring>
 #include <cassert>
 #include <optional>
-#include <iostream>
 
 namespace nexif {
 namespace tiff {
@@ -143,21 +142,6 @@ bool fits_dtype(DType dtype)
   return false;
 }
 
-template <int ExifC, int CppCount, bool ExifVar, bool CppVar>
-struct count_spec {
-  static constexpr int exif_count = ExifC;
-  static constexpr int cpp_count = CppCount;
-  static constexpr bool exif_var = ExifVar;
-  static constexpr bool cpp_var = CppVar;
-};
-using count_scalar = count_spec<1, 1, false, false>;
-template <int C>
-using count_limvar = count_spec<C, C, true, true>;
-template <int C>
-using count_fixed = count_spec<C, C, false, false>;
-using count_var = count_spec<0, 0, true, true>;
-using count_string = count_spec<0, 1, true, false>;
-
 struct ifd_entry {
   constexpr static int BINARY_SIZE = 2 + 2 + 4 + 4;
   uint16_t tag;
@@ -179,6 +163,16 @@ struct ifd_entry {
   {
     return count * size_of_dtype(type);
   }
+
+  ParseResult<std::string_view> data_view(Reader &r) const {
+    int32_t s = size();
+    if (s <= 4) {
+      return std::string_view{(char*)&data[0], (size_t)s};
+    } else {
+      uint32_t o = offset(r);
+      return r.data_view(o, s);
+    }
+  }
 };
 static_assert(sizeof(ifd_entry) == ifd_entry::BINARY_SIZE);
 
@@ -198,6 +192,34 @@ struct base_type<T, true> {
   using type = std::underlying_type_t<T>;
 };
 }  // namespace
+
+template <typename T>
+ParseResult<T> fetch_entry_value_raw_offset(const ifd_entry &entry, int offset, Reader &r)
+{
+  ASSERT_OR_PARSE_ERROR(offset < entry.size(), CORRUPT_DATA, "entry offset out of bounds", nullptr);
+  T t{0};
+  if (entry.size() <= 4) {
+    // Data is inline
+    std::memcpy(&t, ((char *)&entry.data) + offset, sizeof(T));
+  } else {
+    // Data is elsewhere
+    uint32_t r_offset = entry.offset(r) + offset;
+    if (r_offset + sizeof(T) <= r.file_length) {
+      std::memcpy(&t, r.data + r_offset, sizeof(T));
+    } else {
+      return PARSE_ERROR(CORRUPT_DATA, "data offset out of bounds", nullptr);
+    }
+  }
+  if (r.byte_order != std::endian::native) {
+    if constexpr (std::is_same_v<T, rational64u> || std::is_same_v<T, rational64s>) {
+      t.num = nexif::byteswap(t.num);
+      t.denom = nexif::byteswap(t.denom);
+    } else {
+      t = nexif::byteswap(t);
+    }
+  }
+  return t;
+}
 
 template <typename T>
 ParseResult<T> fetch_entry_value(const ifd_entry &entry, int idx, Reader &r)
@@ -223,7 +245,7 @@ ParseResult<T> fetch_entry_value(const ifd_entry &entry, int idx, Reader &r)
       t.num = nexif::byteswap(t.num);
       t.denom = nexif::byteswap(t.denom);
     } else {
-      t = nexif::byteswap(t);
+      t = nexif::byteswap_first_n(t, elem_size);
     }
   }
   return t;
@@ -275,6 +297,7 @@ inline ParseResult<bool> parse_tag(Reader &r, Tag<typename TagInfo::cpp_type> &t
       } else if constexpr (std::is_same_v<BType, rational64s> || std::is_same_v<BType, rational64u>) {
         int mark = r.ptr;
         RETURN_IF_OPT_ERROR(r.seek(entry.offset(r)));
+        tag.value = {};
         if constexpr (TagInfo::count_spec::exif_count == 1) {
           tag.value.num = r.read_u32();
           tag.value.denom = r.read_u32();
@@ -312,6 +335,7 @@ inline ParseResult<bool> parse_tag(Reader &r, Tag<typename TagInfo::cpp_type> &t
             count = TagInfo::count_spec::cpp_count;
             LOG_WARNING(r, "Truncated count", tag_str);
           }
+          tag.value = {};
           for (int i = 0; i < count; ++i) {
             DECL_OR_RETURN(BType, val, fetch_entry_value<BType>(entry, i, r));
             if constexpr (TagInfo::count_spec::exif_var) {

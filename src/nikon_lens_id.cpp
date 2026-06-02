@@ -24,7 +24,8 @@ using namespace std::string_view_literals;
 // The database says:
 //
 // The Nikon LensID is constructed as a Composite tag from the raw hex values of 8 other tags:
-// LensIDNumber, LensFStops, MinFocalLength, MaxFocalLength, MaxApertureAtMinFocal, MaxApertureAtMaxFocal, MCUVersion and LensType, in that order.
+// LensIDNumber, LensFStops, MinFocalLength, MaxFocalLength, MaxApertureAtMinFocal,
+// MaxApertureAtMaxFocal, MCUVersion and LensType, in that order.
 struct NikonFMountLensID {
   std::array<uint8_t, 8> id;
   std::string_view name;
