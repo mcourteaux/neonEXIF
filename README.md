@@ -17,11 +17,11 @@ Currently the parsing-support status looks like this:
 
 | File Type                          | Parsing   | MakerNote    |
 | :--------------------------------- | :-------- | :----------- |
-| .NEF, .DNG (TIFF)                  | ✅        |              |
-| .NEF (Nikon)                       | ✅        | 🟧           |
+| .DNG (Adobe TIFF)                  | ✅        | N/A          |
+| .NEF (Nikon TIFF)                  | ✅        | 🟧           |
 | .CR2 (Canon TIFF)                  | ✅        | 🟧           |
 | .ARW (Sony TIFF)                   | ✅        | ❌ (planned) |
-| .RAF (Fujifilm)                    | ✅        | ❌           |
+| .RAF (Fujifilm TIFF)               | ✅        | ❌           |
 | .MRW (Standard, Minolta)           | 🟧        | ❌           |
 | .MRW (Non-standard, Minolta)       | ❌        | ❌           |
 | .MDC (Minolta)                     | ❌        | ❌           |
