@@ -164,10 +164,11 @@ struct ifd_entry {
     return count * size_of_dtype(type);
   }
 
-  ParseResult<std::string_view> data_view(Reader &r) const {
+  ParseResult<std::string_view> data_view(Reader &r) const
+  {
     int32_t s = size();
     if (s <= 4) {
-      return std::string_view{(char*)&data[0], (size_t)s};
+      return std::string_view{(char *)&data[0], (size_t)s};
     } else {
       uint32_t o = offset(r);
       return r.data_view(o, s);
@@ -275,20 +276,23 @@ inline ParseResult<bool> parse_tag(Reader &r, Tag<typename TagInfo::cpp_type> &t
           INTERNAL_ERROR, "Internal error: no enough string space.", tag_str
         );
         int cnt = entry.count;
-        if (entry.type == DType::ASCII && entry.count > 0) {
-          cnt--;
+        DECL_OR_RETURN(std::string_view, sv, entry.data_view(r));
+        if (entry.type == DType::ASCII) {
+          cnt = 0;
+          while (cnt < entry.count && sv[cnt] != 0) {
+            cnt++;
+          }
+          sv = sv.substr(0, cnt);
         }
         if (cnt == 0) {
           tag.is_set = false;
           return true;
         }
-        if (entry.count <= 4) {
-          tag.value = r.exif_data->store_string_data((char *)&entry.data, cnt);
-          DEBUG_PRINT("store inline string data of length %d: %.*s", cnt, cnt, tag.value.data());
+        tag.value = r.exif_data->store_string_data(sv);
+        if (entry.type == DType::ASCII) {
+          DEBUG_PRINT("store string data of length %d: %.*s", cnt, cnt, tag.value.data());
         } else {
-          DECL_OR_RETURN(std::string_view, sv, r.data_view(entry.offset(r), cnt));
-          tag.value = r.exif_data->store_string_data(sv.data(), sv.size());
-          DEBUG_PRINT("store external string data of length %zu: %.*s", sv.length(), (int)sv.length(), sv.data());
+          DEBUG_PRINT("store byte-data of length %d", cnt);
         }
         DEBUG_PRINT("CharData %p: %+d  (len %u)", (void *)&tag.value, tag.value.ptr_offset, tag.value.length);
         tag.parsed_from = tag_idval;

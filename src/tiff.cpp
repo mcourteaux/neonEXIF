@@ -100,6 +100,7 @@ void debug_print_ifd_entry(Reader &r, const ifd_entry &e, const char *tag_name)
           PRINT_IF_TYPE(DType::SSHORT, int16_t, "%d ", (int)v)
           PRINT_IF_TYPE(DType::BYTE, uint8_t, "0x%02x ", (int)v);
           PRINT_IF_TYPE(DType::SBYTE, int8_t, "0x%02x ", (int)v)
+          PRINT_IF_TYPE(DType::UNDEFINED, uint8_t, "0x%02x ", (int)v);
           PRINT_IF_TYPE(DType::LONG, uint32_t, "%u ", (unsigned)v);
           PRINT_IF_TYPE(DType::SLONG, int32_t, "%d ", (int)v);
           PRINT_IF_TYPE(DType::FLOAT, float, "%f ", v);
@@ -380,7 +381,7 @@ std::optional<ParseError> parse_makernote(Reader &r, ExifData &data, uint32_t of
   }
 
   if (data.make.value.view() == "Canon"sv) {
-    r.seek(offset);
+    RETURN_IF_OPT_ERROR(r.seek(offset));
     return makernote::canon::parse_makernote(r, data);
   }
 

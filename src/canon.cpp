@@ -279,7 +279,7 @@ std::optional<ParseError> parse_makernote(Reader &r, ExifData &data)
           && num_cand < 8
           && lens.id == mn.lens_type.value
           && lens.min_focal == mn.min_focal_length.value
-          && lens.max_focal == mn.min_focal_length.value
+          && lens.max_focal == mn.max_focal_length.value
           && std::abs(lens.min_fnum_at_min_focal - max_aperture) < 0.05f) {
         DEBUG_PRINT("Could be lens: %.*s", (int)lens.name.length(), lens.name.data());
         candidates[num_cand++] = &lens;
@@ -287,7 +287,7 @@ std::optional<ParseError> parse_makernote(Reader &r, ExifData &data)
     }
   }
 
-  if (num_cand == 1) {
+  if (num_cand == 1 && !data.exif.lens_model.is_set) {
     CanonLensID &lens = *candidates[0];
     data.exif.lens_model = data.store_string_data(lens.name);
     data.exif.lens_specification = std::array<rational64u, 4>{
@@ -296,13 +296,19 @@ std::optional<ParseError> parse_makernote(Reader &r, ExifData &data)
       rational64u{(uint32_t)(lens.min_fnum_at_min_focal * 10), 10},
       rational64u{(uint32_t)(lens.min_fnum_at_max_focal * 10), 10},
     };
-  } else {
-    data.exif.lens_specification = std::array<rational64u, 4>{
-      rational64u{mn.min_focal_length, 1},
-      rational64u{mn.min_focal_length, 1},
-      0, 0
-    };
+  }
+  if (mn.min_focal_length && mn.max_focal_length) {
+    if (!data.exif.lens_specification) {
+      data.exif.lens_specification = std::array<rational64u, 4>{
+        rational64u{mn.min_focal_length, 1},
+        rational64u{mn.min_focal_length, 1},
+        0, 0
+      };
+    }
+  }
 
+  // Let's set the candidates anyway
+  if (num_cand > 0) {
     std::array<std::string_view, 8> cand_names;
     for (int i = 0; i < num_cand; ++i) {
       cand_names[i] = candidates[i]->name;

@@ -97,7 +97,7 @@ std::optional<ParseError> parse_makernote(Reader &r, ExifData &data)
       PARSE_NIKON_TAG(lens_specification);
       PARSE_NIKON_TAG(nef_compression);
       PARSE_NIKON_TAG(linearization_table);
-      PARSE_NIKON_TAG(color_balance);
+      // PARSE_NIKON_TAG(color_balance); // We should parse it out and decode it, not just throw it in the users face.
       PARSE_NIKON_TAG(shutter_count);
 
       if (entry.tag == tag_lens_data::TagId) {
@@ -126,9 +126,11 @@ std::optional<ParseError> parse_makernote(Reader &r, ExifData &data)
     std::from_chars(version_bytes, version_bytes + 4, version);
     DEBUG_PRINT("LensData version: %d\n", version);
 
+    /*
     for (int i = 0; i < lensdata_len; ++i) {
       DEBUG_PRINT("%03d: %02x | '%c'", i, lensdata_buffer[i], lensdata_buffer[i]);
     }
+    */
 
     if (version >= 201) {
       // Decrypt with the reverse engineered algorithm.
@@ -153,9 +155,11 @@ std::optional<ParseError> parse_makernote(Reader &r, ExifData &data)
           lensdata_buffer[i] ^= cj;
         }
 
+        /*
         for (int i = 4; i < lensdata_len; ++i) {
           DEBUG_PRINT("%03d: %02x | '%c'", i, lensdata_buffer[i], lensdata_buffer[i]);
         }
+        */
       } else {
         r.warnings.push_back({
           .msg = "Shutter counter or serial number not parsed, which is needed to decipher Nikon lens data",
@@ -206,12 +210,12 @@ std::optional<ParseError> parse_makernote(Reader &r, ExifData &data)
       } break;
     }
 
-    if (id_offset) {
+    if (id_offset && id_offset < lensdata_len) {
       mn.lens_mount = mount;
       mn.lens_mount.parsed_from = tag_lens_data::TagId;
 
       if (mount == NikonMakernote::F_Mount) {
-        if (id_offset) {
+        if (id_offset + 6 < lensdata_len) {
           std::array<std::string_view, 8> cand_lenses;
           uint32_t num_cand = 0;
           mn.f_mount_lens_identifier = std::array<uint8_t, 8>{
@@ -235,19 +239,24 @@ std::optional<ParseError> parse_makernote(Reader &r, ExifData &data)
           }
           if (num_cand == 1) {
             data.exif.lens_model = data.store_string_data(cand_lenses[0]);
-          } else {
+          }
+
+          if (num_cand > 0) {
             data.exif.possible_lenses = {cand_lenses, num_cand};
             data.exif.possible_lenses.parsed_from = tag_lens_data::TagId;
-          }
-          if (!data.exif.lens_model.is_set) {
+          } else {
             r.warnings.push_back({
               .what = "Unknown F-mount lens identifier. Please report your lens to ExifTool and NeonEXIF.",
             });
           }
         }
       } else if (mount == NikonMakernote::Z_Mount) {
-        r.seek(id_offset);
-        mn.z_mount_lens_identifier = r.read_u16();
+        Reader br(r.warnings);
+        br.data = (char *)lensdata_buffer;
+        br.file_length = lensdata_len;
+        br.byte_order = r.byte_order;
+        RETURN_IF_OPT_ERROR(br.seek(id_offset));
+        mn.z_mount_lens_identifier = br.read_u16();
         mn.z_mount_lens_identifier.parsed_from = tag_lens_data::TagId;
 
         // Lookup lens id

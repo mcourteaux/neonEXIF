@@ -617,7 +617,6 @@ struct NikonMakernote {
   Tag<std::array<rational64u, 4>> lens_specification;
   Tag<uint16_t> nef_compression;
   Tag<CharData> linearization_table;
-  Tag<CharData> color_balance;  // possibly encrypted
   Tag<uint32_t> shutter_count;
   Tag<CharData> serial_number;
   Tag<std::array<uint8_t, 8>> f_mount_lens_identifier;
@@ -681,8 +680,8 @@ struct ExifData {
   > makernote;
   // clang-format on
 
-  char string_data[4096];
   uint32_t string_data_ptr{0};
+  char string_data[4096];
 
   ExifData() = default;
   ExifData &operator=(const ExifData &o)
@@ -734,12 +733,15 @@ struct ExifData {
         return {nullptr, 0};
       }
     }
-    assert(string_data_ptr + count < sizeof(string_data) && "out of string storage");
-    char *dst = &string_data[string_data_ptr];
-    std::memcpy(dst, ptr, count);
-    string_data[string_data_ptr + count] = 0;
-    string_data_ptr += count + 1;
-    return {dst, (size_t)count};
+    if (string_data_ptr + count < sizeof(string_data)) {
+      char *dst = &string_data[string_data_ptr];
+      std::memcpy(dst, ptr, count);
+      string_data[string_data_ptr + count] = 0;
+      string_data_ptr += count + 1;
+      return {dst, (size_t)count};
+    } else {
+      return {};
+    }
   }
 
   std::string_view store_string_data(const std::string &str)

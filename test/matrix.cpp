@@ -131,12 +131,12 @@ int main(int argc, char **argv)
 
     std::printf(" |  ");
 
-    print_mark_str(data.make, 15);
+    print_mark_str(data.make, 20);
     print_mark_str(data.model, 25);
     print_mark_str(data.exif.body_serial_number, 14);
     if (data.exif.possible_lenses.value.num) {
       auto name = data.exif.possible_lenses.value.values[0];
-      std::printf(" \033[32m%-*.*s\033[0m", 42, int(name.size()), name.data());
+      std::printf(" \033[32m%-*.*s\033[0m", 42, std::min(42, int(name.size())), name.data());
     } else if (data.exif.lens_model) {
       //print_mark_str(data.exif.lens_make, 15);
       print_mark_str(data.exif.lens_model, 42);
@@ -164,7 +164,7 @@ int main(int argc, char **argv)
         v.timezone_offset
       );
     } else {
-      printf("\033[2m(not set)              \033[0m");
+      printf("\033[2m(not set)                  \033[0m");
     }
 
     double us = std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count() * 1e-3;
