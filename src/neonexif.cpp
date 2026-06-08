@@ -1,6 +1,7 @@
 #include "neonexif/neonexif.hpp"
 #include "neonexif/reader.hpp"
 #include "neonexif/tiff.hpp"
+#include "neonexif/levenshtein.hpp"
 
 #include <cstring>
 #include <cassert>
@@ -367,6 +368,118 @@ std::vector<uint8_t> generate_exif_jpeg_binary_data(const ExifData &data)
   result[3] = (size & 0x00ff);
 
   return result;
+}
+
+/**
+ * This is a rather ugly function that tries to split of the maker name
+ * in the model name of something while picking a common name for said
+ * maker, instead of one of the many variations.
+ *
+ * Examples:
+ *  - "NIKON COORPORATION D650" becomes "Nikon", "D650".
+ *  - "Canon DX400", this function will return "Canon", "DX400".
+ *
+ * It does so by checking for a list of hardcoded prefixes; the makers.
+ * It disgrards some small rebrandings that happened throughout history.
+ * For example, "Carl Zeiss" gets normalized to the new "Zeiss". This
+ * makes it slightly easier to look through a list of brand names.
+ */
+std::pair<std::string_view, std::string_view> normalize_maker_and_model(std::string_view maker, std::string_view model)
+{
+  using namespace std::string_view_literals;
+  char lower_model[256];
+  std::transform(model.begin(), std::min(model.begin() + sizeof(lower_model), model.end()), lower_model, ::tolower);
+  std::string_view lm(lower_model, model.length());
+
+  char lower_prefix[64];
+
+  const auto test = [&](std::string_view prefix) {
+    std::transform(prefix.begin(), prefix.end(), lower_prefix, ::tolower);
+    lower_prefix[prefix.length()] = ' ';
+    if (lm.starts_with(std::string_view(lower_prefix, prefix.length() + 1))) {
+      maker = prefix;
+      model = model.substr(prefix.length() + 1);
+      return true;
+    }
+    return false;
+  };
+
+  if (false
+      || test("Nikon"sv)
+      || test("Canon"sv)
+      || test("Samyang"sv)
+      || test("Sigma"sv)
+      || test("Olympus"sv)
+      || test("Minolta"sv)
+      || test("Samsung"sv)
+      || test("Tamron"sv)) {
+    // Stripped it!
+  } else {
+    if (lm.starts_with("carl zeiss "sv)) {
+      model = model.substr("carl zeiss "sv.length());
+      maker = "Zeiss"sv;
+    } else if (lm.starts_with("voigtlander "sv)) {
+      model = model.substr("Voigtländer "sv.length());
+      maker = "Voigtländer"sv;
+    } else if (lm.starts_with("meke "sv)) {
+      model = model.substr("MEKE "sv.length());
+      maker = "Meike"sv;
+    } else if (maker.length() < 63) {
+      test(maker);
+    }
+  }
+
+  return {maker, model};
+}
+
+std::array<std::string_view, 8> resolve_lens_possibilities(const ExifData &data)
+{
+  std::array<std::string_view, 8> possible_lenses;
+
+  auto &exif = data.exif;
+  if (exif.lens_model.is_set && exif.possible_lenses.value.num == 0) {
+    possible_lenses[0] = exif.lens_model.value.view();
+    return possible_lenses;
+  }
+  if (exif.possible_lenses && exif.possible_lenses.value.num >= 1) {
+    if (exif.possible_lenses.value.num == 1) {
+      possible_lenses[0] = exif.possible_lenses.value.values[0];
+      return possible_lenses;
+    } else {
+      // There are multiple options, let's see if the lens model actually tells us which
+      // one.
+      if (exif.lens_model) {
+        auto [lmaker, lmodel] = normalize_maker_and_model(exif.lens_make.value.view(), exif.lens_model.value.view());
+        LevenshteinCosts lsc{
+          .deletion = 3,
+          .insertion = 3,
+          .capitalizaton = 1,
+          .substitution = 2,
+        };
+        int best = 10000;
+        int best_i = 0;
+        for (int i = 0; i < exif.possible_lenses.value.num; ++i) {
+          auto [cmaker, cmodel] = normalize_maker_and_model(
+            {}, exif.possible_lenses.value.values[i]
+          );
+          int dist = levenshtein_distance(cmaker, lmaker, lsc) + levenshtein_distance(cmodel, lmodel, lsc);
+          if (dist < best) {
+            best_i = i;
+            best = dist;
+          }
+        }
+        if (best < 10) {
+          possible_lenses[0] = exif.possible_lenses.value.values[best_i];
+          return possible_lenses;
+        }
+      }
+    }
+
+    for (int i = 0; i < exif.possible_lenses.value.num; ++i) {
+      possible_lenses[i] = exif.possible_lenses.value.values[i];
+    }
+  }
+  return possible_lenses;
 }
 
 };  // namespace nexif

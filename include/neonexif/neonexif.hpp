@@ -591,9 +591,9 @@ struct ExifIFD {
 
   Tag<std::array<rational64u, 4>> lens_specification;  ///< (MinFocalLen, MaxFocalLen, MinFNum@MinFL, MinFNum@MaxFL)
   Tag<CharData> lens_make;
-  Tag<CharData> lens_model;
+  Tag<CharData> lens_model; // Whatever the file says, or the only option identified by NeonEXIF.
   Tag<CharData> lens_serial_number;
-  Tag<vla<std::string_view, 8>> possible_lenses;
+  Tag<vla<std::string_view, 8>> possible_lenses; // All options identified by NeonEXIF.
 
   Tag<CharData> image_title;
   Tag<CharData> photographer;
@@ -767,6 +767,19 @@ ParseResult<ExifData> read_exif(
   FileType *ft = nullptr,
   FileTypeVariant *fvt = nullptr
 );
+
+/**
+ * This function combines information in exif.lens_model, and exif.possible_lenses.
+ * It's goal is to use real-world known lenses indicated in possible_lenses with
+ * whatever is in the exif.lens_model. Some cameras actually write which lens it is
+ * dispite the fact that the possible_lenses mechanism identifies multiple options.
+ * We can't just use what exif.lens_model says if it's present, because some cameras
+ * also store a generic name, such as "24-70mm", as a best effort without actually knowing
+ * the commercial name of the lens. Possible lenses is guaranteed to list existing lenses.
+ */
+std::array<std::string_view, 8> resolve_lens_possibilities(const ExifData &data);
+
+std::pair<std::string_view, std::string_view> normalize_maker_and_model(std::string_view maker, std::string_view model);
 
 size_t write_exif_data(const ExifData &data, std::vector<uint8_t> &output);
 

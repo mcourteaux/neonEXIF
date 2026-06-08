@@ -1,5 +1,6 @@
 #include "lens_name_parser.hpp"
 #include <cassert>
+#include <charconv>
 
 namespace nexif {
 
