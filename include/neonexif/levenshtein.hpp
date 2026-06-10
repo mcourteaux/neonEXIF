@@ -1,6 +1,5 @@
 #pragma once
 
-#include <alloca.h>
 #include <cstdint>
 #include <cctype>
 #include <string_view>
@@ -28,7 +27,14 @@ static inline int levenshtein_distance(std::string_view word1, std::string_view 
     return size1 * costs.deletion;
   }
 
-  uint16_t *dist_matrix = (uint16_t *)alloca((size1 + 1) * (size2 + 1) * sizeof(uint16_t));
+  uint16_t *dist_matrix = (uint16_t *)
+#if _MSC_VER
+    _alloca
+#else
+    __builtin_alloca
+#endif
+    ( (size1 + 1) * (size2 + 1) * sizeof(uint16_t));
+
 #define ACCESS_DM(i1, i2) dist_matrix[((i1) * (size2 + 1)) + (i2)]
 
   for (int i = 0; i <= size1; i++) {
