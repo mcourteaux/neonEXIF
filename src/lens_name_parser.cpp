@@ -1,6 +1,6 @@
-#include "lens_name_parser.hpp"
+#include "neonexif/lens_name_parser.hpp"
+#include "neonexif/from_chars.hpp"
 #include <cassert>
-#include <charconv>
 
 namespace nexif {
 
@@ -17,11 +17,11 @@ ParsedLensName LensNameParser::parse_lens_name(std::string_view name)
       assert(match.size() == 5 && "Unexpected regex match size");
 
       // first number:
-      std::from_chars(match[1].first, match[1].second, result.min_fnum_at_min_focal);
+      nexif::from_chars(match[1].first, match[1].second, result.min_fnum_at_min_focal);
 
       if (std::csub_match p2 = match[3]; p2.length()) {
         // two numbers:
-        std::from_chars(p2.first + skip_dash, p2.second, result.min_fnum_at_max_focal);
+        nexif::from_chars(p2.first + skip_dash, p2.second, result.min_fnum_at_max_focal);
       } else {
         result.min_fnum_at_max_focal = result.min_fnum_at_min_focal;
       }
@@ -33,11 +33,11 @@ ParsedLensName LensNameParser::parse_lens_name(std::string_view name)
   if (std::regex_search(name.begin(), name.end(), match, lens_focal_range_regex)) {
     assert(match.size() == 3 && "Unexpected regex match size");
     // first number:
-    std::from_chars(match[1].first, match[1].second, result.min_focal);
+    nexif::from_chars(match[1].first, match[1].second, result.min_focal);
 
     if (std::csub_match p2 = match[2]; p2.length()) {
       // two numbers:
-      std::from_chars(p2.first + skip_dash, p2.second, result.max_focal);
+      nexif::from_chars(p2.first + skip_dash, p2.second, result.max_focal);
     } else {
       result.max_focal = result.min_focal;
     }
@@ -49,21 +49,21 @@ ParsedLensName LensNameParser::parse_lens_name(std::string_view name)
       // (Code) INT_RANGE  FLOAT_RANGE
       assert(match.size() == 9 && "Unexpected regex match size");
 
-      std::from_chars(match[2].first, match[2].second, result.min_focal);
+      nexif::from_chars(match[2].first, match[2].second, result.min_focal);
 
       if (std::csub_match p2 = match[3]; p2.length()) {
         // two numbers:
-        std::from_chars(p2.first + skip_dash, p2.second, result.max_focal);
+        nexif::from_chars(p2.first + skip_dash, p2.second, result.max_focal);
       } else {
         result.max_focal = result.min_focal;
       }
 
       // third number:
-      std::from_chars(match[4].first, match[4].second, result.min_fnum_at_min_focal);
+      nexif::from_chars(match[4].first, match[4].second, result.min_fnum_at_min_focal);
 
       if (std::csub_match p2 = match[6]; p2.length()) {
         // fourth numbers:
-        std::from_chars(p2.first + skip_dash, p2.second, result.min_fnum_at_max_focal);
+        nexif::from_chars(p2.first + skip_dash, p2.second, result.min_fnum_at_max_focal);
       } else {
         result.min_fnum_at_max_focal = result.min_fnum_at_min_focal;
       }
@@ -75,16 +75,16 @@ ParsedLensName LensNameParser::parse_lens_name(std::string_view name)
       assert(match.size() == 10 && "Unexpected regex match size");
       float f1, f2, f3, f4;
 
-      std::from_chars(match[1].first, match[1].second, f1);
+      nexif::from_chars(match[1].first, match[1].second, f1);
       if (std::csub_match p2 = match[3]; p2.length()) {
-        std::from_chars(p2.first + skip_dash, p2.second, f2);
+        nexif::from_chars(p2.first + skip_dash, p2.second, f2);
       } else {
         f2 = f1;
       }
 
-      std::from_chars(match[6].first, match[6].second, f3);
+      nexif::from_chars(match[6].first, match[6].second, f3);
       if (std::csub_match p2 = match[8]; p2.length()) {
-        std::from_chars(p2.first + skip_dash, p2.second, f4);
+        nexif::from_chars(p2.first + skip_dash, p2.second, f4);
       } else {
         f4 = f3;
       }

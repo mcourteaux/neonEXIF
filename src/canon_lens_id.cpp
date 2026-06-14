@@ -2,7 +2,7 @@
 #include <cstdint>
 #include <mutex>
 
-#include "lens_name_parser.hpp"
+#include "neonexif/lens_name_parser.hpp"
 
 namespace nexif {
 namespace makernote {
