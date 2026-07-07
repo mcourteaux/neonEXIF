@@ -58,10 +58,10 @@ Programming guidelines: no malloc/free during parsing.
 
 ## Star History
 
-<a href="https://www.star-history.com/?repos=mcourteaux%2Fneonexif&type=date&legend=top-left">
+<a href="https://www.star-history.com/?repos=neonexif%2Fneonexif&type=date&legend=top-left">
  <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=mcourteaux/neonexif&type=date&theme=dark&legend=top-left" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=mcourteaux/neonexif&type=date&legend=top-left" />
-   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=mcourteaux/neonexif&type=date&legend=top-left" />
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=neonexif/neonexif&type=date&theme=dark&legend=top-left&sealed_token=U43ur6aDWiuuoAfwE6kdXUjlFLp0iXUistEeqzNhjDffea99C2bCP8vmjyPue959iSeo8PCALwYch3MkZ0loWLi1LAGOX7yay0o7iTigLb-HFC47o3B0c83bFot3HI9E9ShZv_czSONvEtb9YE7chD5gnObZyqy1xmIn7ql7W_scL84SvCln_V_tsQ30" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=neonexif/neonexif&type=date&legend=top-left&sealed_token=U43ur6aDWiuuoAfwE6kdXUjlFLp0iXUistEeqzNhjDffea99C2bCP8vmjyPue959iSeo8PCALwYch3MkZ0loWLi1LAGOX7yay0o7iTigLb-HFC47o3B0c83bFot3HI9E9ShZv_czSONvEtb9YE7chD5gnObZyqy1xmIn7ql7W_scL84SvCln_V_tsQ30" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=neonexif/neonexif&type=date&legend=top-left&sealed_token=U43ur6aDWiuuoAfwE6kdXUjlFLp0iXUistEeqzNhjDffea99C2bCP8vmjyPue959iSeo8PCALwYch3MkZ0loWLi1LAGOX7yay0o7iTigLb-HFC47o3B0c83bFot3HI9E9ShZv_czSONvEtb9YE7chD5gnObZyqy1xmIn7ql7W_scL84SvCln_V_tsQ30" />
  </picture>
 </a>
