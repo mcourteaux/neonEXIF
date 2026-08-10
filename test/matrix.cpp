@@ -86,9 +86,9 @@ int main(int argc, char **argv)
     if (file.filename() == "silvernode.thumb_db") {
       continue;
     }
-    std::string ext = file.extension().generic_string();
+    std::u8string ext = file.extension().u8string();
     std::transform(ext.begin(), ext.end(), ext.begin(), [](uint8_t c) { return std::tolower(c); });
-    if (ext == ".exe" || ext == ".zip" || ext == ".7z") {
+    if (ext == u8".exe" || ext == u8".zip" || ext == u8".7z") {
       continue;
     }
     std::filesystem::path relpath = file.lexically_relative(dir);

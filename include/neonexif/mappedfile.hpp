@@ -72,7 +72,8 @@ public:
 		if (!data_) {
 #ifdef __EXCEPTIONS
 			std::ostringstream o;
-			o << "Couldn't open File \"" << path << "\"";
+			auto utf8 = path.u8string();
+			o << "Couldn't open File \"" << std::string_view((char*)utf8.data(), utf8.length()) << "\"";
 			throw io_exception(o.str());
 #else /* __EXCEPTIONS */
 			std::cerr << "Couldn't open File \"" << path << "\"" << std::endl;
