@@ -24,5 +24,8 @@ static nexif::ExifData generate_sample_exif_data()
   data.exif.metadata_editing_software = str_neonexif;
   data.exif.raw_developing_software = str_neonraw;
   data.exif.image_editing_software = str_silvernode;
+  // Set, but empty payload: the writer must skip this tag instead of emitting a zero-count entry.
+  data.exif.lens_serial_number.is_set = true;
+  data.exif.lens_serial_number.value.set(nullptr, 0);
   return data;
 }

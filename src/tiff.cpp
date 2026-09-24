@@ -528,11 +528,16 @@ size_t write_tiff_tag_scalar(IFD_Writer &w, typename TagInfo::cpp_type value)
 }
 
 template <typename TagInfo>
-size_t write_tiff_tag_string(IFD_Writer &w, const char *str, uint32_t length)
+void write_tiff_tag_string(IFD_Writer &w, const char *str, uint32_t length)
 {
   static_assert(TagInfo::tiff_type == DType::ASCII);
   // Variable count is compatible with count 1
   static_assert(TagInfo::count_spec::cpp_count == 1);
+  if (length == 0) {
+    // No payload: TIFF entries require count >= 1, so skip the tag entirely.
+    DEBUG_PRINT("Skipping tag %04x with empty string payload", TagInfo::TagId);
+    return;
+  }
   ifd_entry e;
   e.type = TagInfo::tiff_type;
   e.tag = TagInfo::TagId;
@@ -554,7 +559,7 @@ size_t write_tiff_tag_string(IFD_Writer &w, const char *str, uint32_t length)
     w.num_offsets_to_adjust++;
   }
   w.num_tags_written++;
-  return write_ifd_entry(w.tags_writer, e);
+  write_ifd_entry(w.tags_writer, e);
 }
 
 template <typename TagInfo>
